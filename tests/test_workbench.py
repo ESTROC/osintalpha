@@ -167,3 +167,20 @@ def test_groq_chat_uses_provider_endpoint(client,auth,monkeypatch):
     assert r.status_code==200, r.text
     assert r.json()['provider']=='groq'
     assert r.json()['remote'] is True
+
+def test_groq_explicit_provider_wins_over_legacy_flag(client,auth,case,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','dummy-groq-key-for-test')
+    monkeypatch.delenv('XAI_API_KEY',raising=False)
+    response=client.post('/api/cases/'+case+'/chat',headers=auth,json={
+        'question':'Summarize the public-source records', 'provider':'groq','use_grok':True})
+    assert response.status_code==403
+    assert 'groq' in response.json()['detail']
+
+
+def test_grok_error_guides_groq_configuration(client,auth,case,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','dummy-groq-key-for-test')
+    monkeypatch.delenv('XAI_API_KEY',raising=False)
+    response=client.post('/api/cases/'+case+'/chat',headers=auth,json={
+        'question':'Summarize the public-source records', 'provider':'grok'})
+    assert response.status_code==409
+    assert 'choose GroqCloud' in response.json()['detail']

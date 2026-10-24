@@ -368,7 +368,7 @@ def report_json(case_id:str,actor=Depends(actor_from_cookie)):
 class ChatMessage(BaseModel):
     question: str=Field(min_length=2,max_length=2000)
     use_grok:bool=False  # Backward compatibility with previous Grok-only interface
-    provider:Literal['local','groq','grok']='local'
+    provider:Literal['local','groq','grok']|None=None
 
 
 def fallback_answer(question, evidence):
@@ -388,13 +388,14 @@ def fallback_answer(question, evidence):
 async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     ca,ev,runs=load_report(case_id)
     answer,ids=fallback_answer(body.question,ev)
-    provider='grok' if body.use_grok else body.provider
+    provider=body.provider or ('grok' if body.use_grok else 'local')
     if provider=='local':
         return {'model':'Offline evidence lookup','answer':answer,'evidenceIds':ids,'remote':False}
     if provider=='grok':
         key=os.getenv('XAI_API_KEY','').strip()
         if not key:
-            raise HTTPException(409,'XAI_API_KEY not configured. Local evidence lookup is available.')
+            suggestion=' GroqCloud is configured; choose GroqCloud in the AI provider menu.' if os.getenv('GROQ_API_KEY','').strip() else ' Choose GroqCloud if you have a GROQ_API_KEY.'
+            raise HTTPException(409,'xAI Grok was selected, but XAI_API_KEY is not configured.'+suggestion)
     else:
         key=os.getenv('GROQ_API_KEY','').strip()
         if not key:
