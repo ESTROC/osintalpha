@@ -1,100 +1,128 @@
-"""SQLite persistence, short-lived connections, explicit constraints and audit history."""
-import hashlib
-import os
-import secrets
-import sqlite3
+"""SQLite dev / PostgreSQL prod. Existing queries use '?' placeholders."""
+from __future__ import annotations
+import hashlib,os,re,secrets,sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime,timezone
 from pathlib import Path
 
-
-def utcnow():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def db_path():
-    return Path(os.getenv('OSINTALPHA_DB_PATH', './instance/osintalpha.db')).resolve()
-
-
+def utcnow():return datetime.now(timezone.utc).isoformat(timespec='seconds')
+def is_postgres():return bool(os.getenv('DATABASE_URL','').strip())
+def db_path():return Path(os.getenv('OSINTALPHA_DB_PATH','./instance/osintalpha.db')).resolve()
+class PgConnection:
+    def __init__(self,c):self.connection=c
+    def execute(self,sql,args=None):
+        if re.match(r'^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+',sql,re.I):
+            sql=re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO','INSERT INTO',sql,count=1,flags=re.I).rstrip().rstrip(';')+' ON CONFLICT DO NOTHING'
+        return self.connection.execute(sql.replace('?','%s'),args or ())
+    def executescript(self,sql):
+        for item in sql.split(';'):
+            if item.strip():self.connection.execute(item)
 @contextmanager
 def connect():
-    p = db_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(str(p), timeout=15)
-    db.row_factory = sqlite3.Row
-    db.execute('PRAGMA foreign_keys=ON')
-    db.execute('PRAGMA busy_timeout=15000')
-    try:
-        yield db
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
+    if is_postgres():
+        import psycopg
+        from psycopg.rows import dict_row
+        with psycopg.connect(os.environ['DATABASE_URL'],row_factory=dict_row,connect_timeout=10) as conn:
+            yield PgConnection(conn)
+    else:
+        p=db_path();p.parent.mkdir(parents=True,exist_ok=True)
+        conn=sqlite3.connect(str(p),timeout=15)
+        conn.row_factory=sqlite3.Row
+        conn.execute('PRAGMA foreign_keys=ON')
+        conn.execute('PRAGMA busy_timeout=15000')
+        try:
+            yield conn;conn.commit()
+        except Exception:
+            conn.rollback();raise
+        finally:conn.close()
+SCHEMA="""
+CREATE TABLE IF NOT EXISTS users (
+ id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
+ passhash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'analyst',
+ active INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS sessions (
+ token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cases (
+ id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_type TEXT NOT NULL,
+ query TEXT NOT NULL,purpose TEXT NOT NULL,authority_confirmed INTEGER NOT NULL,
+ ai_opt_in INTEGER NOT NULL DEFAULT 0,created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,last_collected TEXT
+);
+CREATE TABLE IF NOT EXISTS evidence (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,label TEXT NOT NULL,summary TEXT NOT NULL,source_url TEXT NOT NULL,
+ source_ref TEXT NOT NULL DEFAULT '',fetched_at TEXT NOT NULL,observed_at TEXT,
+ sha256 TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'candidate',
+ reviewer_notes TEXT NOT NULL DEFAULT '',reviewed_by TEXT,reviewed_at TEXT,raw_json TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_evidence ON evidence(case_id,provider,source_ref);
+CREATE INDEX IF NOT EXISTS evidence_case_idx ON evidence(case_id);
+CREATE TABLE IF NOT EXISTS collection_runs (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,state TEXT NOT NULL,result_count INTEGER NOT NULL,
+ message TEXT NOT NULL,ran_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS audit_events (
+ id TEXT PRIMARY KEY,actor TEXT NOT NULL,action TEXT NOT NULL,
+ object_type TEXT NOT NULL,object_id TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS case_context (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ city TEXT NOT NULL DEFAULT '',organization TEXT NOT NULL DEFAULT '',
+ profession TEXT NOT NULL DEFAULT '',public_handle TEXT NOT NULL DEFAULT '',
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_sessions (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ owner_id TEXT NOT NULL REFERENCES users(id),title TEXT NOT NULL,
+ created_at TEXT NOT NULL,updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_sessions_case ON research_sessions(case_id,created_at);
+CREATE TABLE IF NOT EXISTS research_messages (
+ id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+ role TEXT NOT NULL,content TEXT NOT NULL,provider TEXT NOT NULL DEFAULT '',
+ evidence_ids_json TEXT NOT NULL DEFAULT '[]',web_leads_json TEXT NOT NULL DEFAULT '[]',
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,created_at);
+CREATE TABLE IF NOT EXISTS search_history (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),search_query TEXT NOT NULL,
+ subject_type TEXT NOT NULL,providers_json TEXT NOT NULL,results_count INTEGER NOT NULL,
+ errors_count INTEGER NOT NULL,created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS search_history_case ON search_history(case_id,created_at);
+CREATE TABLE IF NOT EXISTS claim_links (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ claim_text TEXT NOT NULL,stance TEXT NOT NULL DEFAULT 'supports',
+ created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS claim_links_case ON claim_links(case_id);
+"""
+def hash_password(password):
+    salt=secrets.token_hex(16)
+    digest=hashlib.scrypt(password.encode(),salt=bytes.fromhex(salt),n=16384,r=8,p=1).hex()
+    return salt,digest
 def init_db():
     with connect() as c:
-        c.executescript('''
-        PRAGMA journal_mode=WAL;
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
-          passhash TEXT NOT NULL, salt TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin'
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-          token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
-          expires_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS cases (
-          id TEXT PRIMARY KEY, title TEXT NOT NULL, subject_type TEXT NOT NULL,
-          query TEXT NOT NULL, purpose TEXT NOT NULL,
-          authority_confirmed INTEGER NOT NULL,
-          ai_opt_in INTEGER NOT NULL DEFAULT 0,
-          created_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL,
-          last_collected TEXT
-        );
-        CREATE TABLE IF NOT EXISTS evidence (
-          id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-          provider TEXT NOT NULL, label TEXT NOT NULL, summary TEXT NOT NULL,
-          source_url TEXT NOT NULL, source_ref TEXT NOT NULL DEFAULT '',
-          fetched_at TEXT NOT NULL, observed_at TEXT,
-          sha256 TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate',
-          reviewer_notes TEXT NOT NULL DEFAULT '', reviewed_by TEXT,
-          reviewed_at TEXT,
-          raw_json TEXT NOT NULL
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS uniq_evidence ON evidence(case_id,provider,source_ref);
-        CREATE INDEX IF NOT EXISTS evidence_case_idx ON evidence(case_id);
-        CREATE TABLE IF NOT EXISTS collection_runs (
-          id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-          provider TEXT NOT NULL, state TEXT NOT NULL, result_count INTEGER NOT NULL,
-          message TEXT NOT NULL, ran_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS audit_events (
-          id TEXT PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
-          object_type TEXT NOT NULL, object_id TEXT NOT NULL, details TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        );
-        ''')
-        password = os.environ.get('OSINTALPHA_ADMIN_PASSWORD')
-        if not password or len(password) < 12:
-            raise RuntimeError('Set OSINTALPHA_ADMIN_PASSWORD to a unique password of at least 12 characters in the environment.')
-        existing = c.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
-        if not existing:
-            salt = secrets.token_hex(16)
-            digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
-            c.execute('INSERT INTO users(id, username, passhash, salt) VALUES (?,?,?,?)',
-                      (secrets.token_hex(16), 'admin', digest, salt))
-
-
-def verify_password(password, row):
-    expected = bytes.fromhex(row['passhash'])
-    actual = hashlib.scrypt(password.encode(), salt=bytes.fromhex(row['salt']), n=16384, r=8, p=1)
-    return secrets.compare_digest(actual, expected)
-
-
-def audit(actor, action, object_type, object_id, details=''):
+        if not is_postgres():c.execute('PRAGMA journal_mode=WAL')
+        c.executescript(SCHEMA)
+        if is_postgres():c.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1')
+        else:
+            columns={r['name'] for r in c.execute('PRAGMA table_info(users)')}
+            if 'active' not in columns:c.execute('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
+        password=os.getenv('OSINTALPHA_ADMIN_PASSWORD','')
+        if len(password)<12:raise RuntimeError('Set OSINTALPHA_ADMIN_PASSWORD to >=12 characters')
+        if not c.execute('SELECT id FROM users WHERE username=?',('admin',)).fetchone():
+            salt,digest=hash_password(password)
+            c.execute('INSERT INTO users(id,username,passhash,salt,role,active) VALUES (?,?,?,?,?,?)',
+              (secrets.token_hex(16),'admin',digest,salt,'admin',1))
+def verify_password(password,row):
+    return secrets.compare_digest(hashlib.scrypt(password.encode(),salt=bytes.fromhex(row['salt']),n=16384,r=8,p=1),bytes.fromhex(row['passhash']))
+def audit(actor,action,object_type,object_id,details=''):
     with connect() as c:
         c.execute('INSERT INTO audit_events VALUES (?,?,?,?,?,?,?)',
-                  (secrets.token_hex(12), actor, action, object_type, object_id, details[:500], utcnow()))
+                  (secrets.token_hex(12),actor,action,object_type,object_id,details[:500],utcnow()))

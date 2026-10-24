@@ -53,7 +53,7 @@ def actor_from_cookie(req: Request):
         raise HTTPException(401, 'Please sign in.')
     with db.connect() as c:
         row = c.execute('''SELECT u.id,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id
-            WHERE s.token_hash=? AND s.expires_at>?''',
+            WHERE s.token_hash=? AND s.expires_at>? AND u.active=1''',
             (hashlib.sha256(token.encode()).hexdigest(), int(time.time()))).fetchone()
     if not row:
         raise HTTPException(401, 'Session expired. Sign in again.')
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '1.0.0', 'database': 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '3.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -120,6 +120,10 @@ def me(actor=Depends(actor_from_cookie)):
 
 
 class CaseInput(BaseModel):
+    city:str=Field(default='',max_length=120)
+    organization:str=Field(default='',max_length=160)
+    profession:str=Field(default='',max_length=120)
+    public_handle:str=Field(default='',max_length=120)
     title: str = Field(min_length=3, max_length=140)
     subject_type: Literal['person','organization','domain','ip']
     query: str = Field(min_length=3, max_length=160)
@@ -131,11 +135,13 @@ class CaseInput(BaseModel):
 @app.get('/api/overview')
 def overview(actor=Depends(actor_from_cookie)):
     with db.connect() as c:
-        cases = c.execute('SELECT count(*) n FROM cases').fetchone()['n']
-        ev = c.execute('SELECT count(*) n FROM evidence').fetchone()['n']
-        verified = c.execute("SELECT count(*) n FROM evidence WHERE status='corroborated'").fetchone()['n']
-        recent = [dict(r) for r in c.execute('SELECT id,title,subject_type,created_at,last_collected FROM cases ORDER BY created_at DESC LIMIT 6')]
-        runs = [dict(r) for r in c.execute('SELECT provider,state,result_count,ran_at,message FROM collection_runs ORDER BY ran_at DESC LIMIT 7')]
+        clause='' if actor['role']=='admin' else ' WHERE created_by=?'
+        args=() if actor['role']=='admin' else (actor['id'],)
+        cases=c.execute('SELECT count(*) n FROM cases'+clause,args).fetchone()['n']
+        ev=c.execute('SELECT count(*) n FROM evidence WHERE case_id IN (SELECT id FROM cases'+clause+')',args).fetchone()['n']
+        verified=c.execute("SELECT count(*) n FROM evidence WHERE status='corroborated' AND case_id IN (SELECT id FROM cases"+clause+")",args).fetchone()['n']
+        recent = [dict(r) for r in c.execute('SELECT id,title,subject_type,created_at,last_collected FROM cases'+clause+' ORDER BY created_at DESC LIMIT 6',args)]
+        runs = [dict(r) for r in c.execute('SELECT provider,state,result_count,ran_at,message FROM collection_runs WHERE case_id IN (SELECT id FROM cases'+clause+') ORDER BY ran_at DESC LIMIT 7',args)]
     return {'cases':cases,'evidence':ev,'corroborated':verified,'sources':len(CATALOG),
             'projects':len(OSS_PROJECTS),'recent':recent,'runs':runs}
 
@@ -145,7 +151,7 @@ def cases(actor=Depends(actor_from_cookie)):
     with db.connect() as c:
         return {'items':[dict(r) for r in c.execute('''SELECT c.*,
                 (SELECT count(*) FROM evidence e WHERE e.case_id=c.id) evidence_count
-                FROM cases c ORDER BY c.created_at DESC LIMIT 250''')]}
+                FROM cases c WHERE (? = 'admin' OR c.created_by=?) ORDER BY c.created_at DESC LIMIT 250''',(actor['role'],actor['id']))]}
 
 
 @app.post('/api/cases', status_code=201)
@@ -162,31 +168,39 @@ def create_case(body: CaseInput, actor=Depends(protect)):
                  VALUES (?,?,?,?,?,?,?,?,?)''',
                  (id,body.title.strip(),body.subject_type,body.query.strip(),body.purpose.strip(),1,
                   1 if body.ai_opt_in else 0,actor['id'],iso_now()))
+    with db.connect() as c:
+        c.execute('INSERT INTO case_context(case_id,city,organization,profession,public_handle,updated_at) VALUES (?,?,?,?,?,?)',
+            (id,body.city.strip(),body.organization.strip(),body.profession.strip(),body.public_handle.strip(),iso_now()))
     write_audit(actor['id'], 'create', 'case', id)
     return {'id':id}
 
 
-def case_or_404(c, case_id):
-    row = c.execute('SELECT * FROM cases WHERE id=?', (case_id,)).fetchone()
-    if not row: raise HTTPException(404,'Investigation not found.')
-    return dict(row)
+def case_or_404(c,case_id,actor=None):
+    row=c.execute('SELECT * FROM cases WHERE id=?',(case_id,)).fetchone()
+    if not row:raise HTTPException(404,'Investigation not found.')
+    data=dict(row)
+    if actor and actor['role']!='admin' and data['created_by']!=actor['id']:
+        raise HTTPException(404,'Investigation not found.')
+    return data
 
 
 @app.get('/api/cases/{case_id}')
 def get_case(case_id:str, actor=Depends(actor_from_cookie)):
     with db.connect() as c:
-        case = case_or_404(c, case_id)
+        case = case_or_404(c,case_id,actor)
         evidence = [dict(x) for x in c.execute('''SELECT id,provider,label,summary,source_url,source_ref,fetched_at,
                      observed_at,sha256,status,reviewer_notes,reviewed_at FROM evidence
                      WHERE case_id=? ORDER BY fetched_at DESC,provider ASC''',(case_id,))]
         runs = [dict(x) for x in c.execute('SELECT * FROM collection_runs WHERE case_id=? ORDER BY ran_at DESC LIMIT 80',(case_id,))]
-    return {'case':case,'evidence':evidence,'runs':runs}
+    with db.connect() as c:
+        context=c.execute('SELECT city,organization,profession,public_handle FROM case_context WHERE case_id=?',(case_id,)).fetchone()
+    return {'case':case,'context':dict(context) if context else {},'evidence':evidence,'runs':runs}
 
 
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
-        case_or_404(c,case_id)
+        case_or_404(c,case_id,actor)
         c.execute('DELETE FROM cases WHERE id=?',(case_id,))
     write_audit(actor['id'],'delete','case',case_id,'Deleted case and associated evidence')
     return {'ok':True}
@@ -205,7 +219,7 @@ class CollectInput(BaseModel):
 @app.post('/api/cases/{case_id}/collect')
 async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
     with db.connect() as c:
-        case=case_or_404(c,case_id)
+        case=case_or_404(c,case_id,actor)
     providers=list(dict.fromkeys(body.providers))
     if len(providers)>8: raise HTTPException(422,'At most eight sources per run.')
     allowed={s.id for s in CATALOG if case['subject_type'] in s.scope}
@@ -234,6 +248,11 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
                       (uid(),case_id,p,state,count,msg,iso_now()))
             result.append({'provider':p,'status':state,'new':count,'message':msg})
         c.execute('UPDATE cases SET last_collected=? WHERE id=?',(iso_now(),case_id))
+    with db.connect() as c:
+        c.execute('INSERT INTO search_history VALUES (?,?,?,?,?,?,?,?,?)',(
+            uid(),case_id,actor['id'],case['query'],case['subject_type'],
+            json.dumps(providers),sum(x['new'] for x in result),
+            sum(x['status']=='error' for x in result),iso_now()))
     write_audit(actor['id'],'collect','case',case_id,','.join(providers))
     return {'results':result}
 
@@ -248,6 +267,7 @@ def review_evidence(evidence_id:str,body:ReviewInput,actor=Depends(protect)):
     with db.connect() as c:
         row=c.execute('SELECT * FROM evidence WHERE id=?',(evidence_id,)).fetchone()
         if not row: raise HTTPException(404,'Evidence not found.')
+        case_or_404(c,row['case_id'],actor)
         c.execute('''UPDATE evidence SET status=?,reviewer_notes=?,reviewed_at=?,reviewed_by=? WHERE id=?''',
                   (body.status,body.reviewer_notes,iso_now(),actor['id'],evidence_id))
     write_audit(actor['id'],'review','evidence',evidence_id,body.status)
@@ -274,7 +294,7 @@ def manual_evidence(case_id:str,body:ManualEvidence,actor=Depends(protect)):
          'note':'Manually submitted lead; source content not independently downloaded/verified'}
     packed=json.dumps(raw,sort_keys=True)
     with db.connect() as c:
-        case_or_404(c,case_id)
+        case_or_404(c,case_id,actor)
         c.execute('''INSERT INTO evidence(id,case_id,provider,label,summary,source_url,source_ref,fetched_at,sha256,raw_json)
                      VALUES (?,?,?,?,?,?,?,?,?,?)''',
                   (id,case_id,'analyst',body.label,body.summary,body.source_url,id,iso_now(),
@@ -333,9 +353,9 @@ def build_html_report(case,evidence,runs):
     <p class="muted">Method: public API candidate discovery, manual evidence review, no automatic identity merging. Source links may change after collection. For sensitive real-world decisions obtain independent verification.</p></body></html>'''
 
 
-def load_report(case_id):
+def load_report(case_id,actor=None):
     with db.connect() as c:
-        ca=case_or_404(c,case_id)
+        ca=case_or_404(c,case_id,actor)
         ev=[dict(x) for x in c.execute('SELECT * FROM evidence WHERE case_id=? ORDER BY provider,label',(case_id,))]
         runs=[dict(x) for x in c.execute('SELECT * FROM collection_runs WHERE case_id=? ORDER BY ran_at DESC',(case_id,))]
     return ca,ev,runs
@@ -343,14 +363,14 @@ def load_report(case_id):
 
 @app.get('/api/cases/{case_id}/report.html',response_class=HTMLResponse)
 def report_html(case_id:str,actor=Depends(actor_from_cookie)):
-    ca,ev,runs=load_report(case_id)
+    ca,ev,runs=load_report(case_id,actor)
     write_audit(actor['id'],'export','case',case_id,'HTML report')
     return HTMLResponse(build_html_report(ca,ev,runs),headers={'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'",'Cache-Control':'no-store'})
 
 
 @app.get('/api/cases/{case_id}/report.pdf')
 def report_pdf(case_id:str,actor=Depends(actor_from_cookie)):
-    ca,ev,runs=load_report(case_id)
+    ca,ev,runs=load_report(case_id,actor)
     try:
         from weasyprint import HTML
         from fastapi.responses import Response as ApiResponse
@@ -363,7 +383,7 @@ def report_pdf(case_id:str,actor=Depends(actor_from_cookie)):
 
 @app.get('/api/cases/{case_id}/report.json')
 def report_json(case_id:str,actor=Depends(actor_from_cookie)):
-    ca,ev,runs=load_report(case_id)
+    ca,ev,runs=load_report(case_id,actor)
     for e in ev: e.pop('raw_json',None)
     write_audit(actor['id'],'export','case',case_id,'JSON report')
     return {'case':ca,'evidence':ev,'runs':runs,'generatedAt':iso_now(),'disclaimer':'Candidate public records require independent identity and fact verification.'}
@@ -380,6 +400,7 @@ class ChatMessage(BaseModel):
     provider:Literal['local','groq','grok']|None=None
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
+    session_id:str|None=Field(default=None,max_length=64)
 
 
 class ConsentUpdate(BaseModel):
@@ -389,7 +410,7 @@ class ConsentUpdate(BaseModel):
 @app.put('/api/cases/{case_id}/ai-consent')
 def update_ai_consent(case_id:str,body:ConsentUpdate,actor=Depends(protect)):
     with db.connect() as c:
-        case_or_404(c,case_id)
+        case_or_404(c,case_id,actor)
         c.execute('UPDATE cases SET ai_opt_in=? WHERE id=?',(1 if body.enabled else 0,case_id))
     write_audit(actor['id'],'ai_consent','case',case_id,'enabled' if body.enabled else 'disabled')
     return {'ok':True,'ai_opt_in':body.enabled,
@@ -410,7 +431,7 @@ def chat_history(body):
 @app.post('/api/cases/{case_id}/chat')
 async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     from .analyst import offline_guidance, make_system_prompt, normalize_ai_response, GROQ_RESPONSE_SCHEMA
-    ca,ev,runs=load_report(case_id)
+    ca,ev,runs=load_report(case_id,actor)
     provider=body.provider or ('grok' if body.use_grok else 'local')
     if body.web_search and provider!='groq':
         raise HTTPException(422,'Public web research requires GroqCloud and explicit provider selection.')
@@ -422,6 +443,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     if provider=='local':
         response=offline_guidance(question,ca,records,runs,history)
         response.update({'model':'Guided offline mode (rules, not AI)','provider':'local','remote':False})
+        response['sessionId']=save_chat(case_id,actor,body,question,response,'local')
         return response
     keyname='GROQ_API_KEY' if provider=='groq' else 'XAI_API_KEY'
     key=os.getenv(keyname,'').strip()
@@ -485,6 +507,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             response['webLeads']=extract_web_leads(output)
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records')
+        response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
         return {'model':model,'provider':provider,**response,'remote':True,
                 'webSearch':bool(body.web_search),
                 'note':'Search output is a lead, not independent identity verification. Check original sources.'}
@@ -519,7 +542,7 @@ def capabilities(actor=Depends(actor_from_cookie)):
 def case_brief(case_id:str,actor=Depends(actor_from_cookie)):
     """Deterministic, auditable source-first summary; deliberately not an LLM narrative."""
     with db.connect() as c:
-        ca=case_or_404(c,case_id)
+        ca=case_or_404(c,case_id,actor)
         ev=[dict(x) for x in c.execute('''SELECT id,label,summary,status,provider,source_url,fetched_at
            FROM evidence WHERE case_id=? ORDER BY fetched_at DESC LIMIT 250''',(case_id,))]
         runs=[dict(x) for x in c.execute('''SELECT provider,state,message,ran_at FROM collection_runs
@@ -541,8 +564,191 @@ def case_brief(case_id:str,actor=Depends(actor_from_cookie)):
             'failures':failed,'highlights':ev[:8],'nextSteps':next_steps,
             'caveat':'Evidence is a collection of claims and candidate matches, not proof of identity, risk or wrongdoing.'}
 
+
+
+# The following operations are transactionally stored in the configured database.
+# Agent operations remain bounded by case ownership and do not claim auto-verification.
+def admin_only(actor):
+    if actor['role']!='admin':
+        raise HTTPException(403,'Administrator permission required.')
+
+class CreateUser(BaseModel):
+    username:str=Field(min_length=3,max_length=60,pattern=r'^[A-Za-z0-9_.-]+
+def audit_log(actor=Depends(actor_from_cookie)):
+    if actor['role']!='admin':raise HTTPException(403,'Administrator permission required.')
+    with db.connect() as c:
+        items=[dict(x) for x in c.execute('SELECT action,object_type,object_id,details,created_at FROM audit_events ORDER BY created_at DESC LIMIT 100')]
+    return {'items':items}
+
+
+@app.middleware('http')
+async def security_headers(req:Request,call_next):
+    res=await call_next(req)
+    res.headers['X-Content-Type-Options']='nosniff'
+    res.headers['Referrer-Policy']='strict-origin-when-cross-origin'
+    res.headers['X-Frame-Options']='DENY'
+    res.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
+    if req.url.path == '/' or req.url.path.startswith('/assets/'):
+        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    return res
+)
+    password:str=Field(min_length=12,max_length=160)
+    role:Literal['admin','analyst']='analyst'
+
+@app.get('/api/users')
+def list_users(actor=Depends(actor_from_cookie)):
+    admin_only(actor)
+    with db.connect() as c:
+        rows=c.execute('SELECT id,username,role,active FROM users ORDER BY username')
+        return {'items':[dict(r) for r in rows]}
+
+@app.post('/api/users',status_code=201)
+def create_user(body:CreateUser,actor=Depends(protect)):
+    admin_only(actor)
+    salt,digest=db.hash_password(body.password)
+    user_id=uid()
+    try:
+        with db.connect() as c:
+            c.execute('INSERT INTO users(id,username,passhash,salt,role,active) VALUES (?,?,?,?,?,?)',
+                (user_id,body.username.strip(),digest,salt,body.role,1))
+    except (sqlite3.IntegrityError,Exception) as exc:
+        if 'unique' in str(exc).lower() or 'duplicate' in str(exc).lower():
+            raise HTTPException(409,'Username already exists.') from exc
+        raise
+    write_audit(actor['id'],'user_create','user',user_id,body.role)
+    return {'id':user_id,'username':body.username,'role':body.role}
+
+@app.get('/api/cases/{case_id}/context')
+def get_case_context(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        item=c.execute('SELECT * FROM case_context WHERE case_id=?',(case_id,)).fetchone()
+    return dict(item) if item else {'case_id':case_id,'city':'','organization':'','profession':'','public_handle':''}
+
+class ContextUpdate(BaseModel):
+    city:str=Field(default='',max_length=120)
+    organization:str=Field(default='',max_length=160)
+    profession:str=Field(default='',max_length=120)
+    public_handle:str=Field(default='',max_length=120)
+
+@app.put('/api/cases/{case_id}/context')
+def put_case_context(case_id:str,body:ContextUpdate,actor=Depends(protect)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        c.execute('DELETE FROM case_context WHERE case_id=?',(case_id,))
+        c.execute('INSERT INTO case_context VALUES (?,?,?,?,?,?)',
+            (case_id,body.city.strip(),body.organization.strip(),
+            body.profession.strip(),body.public_handle.strip(),iso_now()))
+    write_audit(actor['id'],'context_update','case',case_id)
+    return {'ok':True}
+
+@app.get('/api/cases/{case_id}/triage')
+def case_triage(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case=case_or_404(c,case_id,actor)
+        clues=c.execute('SELECT * FROM case_context WHERE case_id=?',(case_id,)).fetchone()
+        records=[dict(r) for r in c.execute(
+            'SELECT id,label,summary,provider,status,source_url,raw_json FROM evidence WHERE case_id=? LIMIT 500',(case_id,))]
+    context=dict(clues) if clues else {}
+    hints=[(k,str(context.get(k,'')).strip()) for k in ('city','organization','profession','public_handle')]
+    hints=[(k,value) for k,value in hints if value]
+    ranked=[]
+    for row in records:
+        try:raw=json.loads(row['raw_json'])
+        except (ValueError,TypeError):raw={}
+        attrs={k:str(raw.get(k,'') or '') for k in ('location','company','bio','login','display_name')}
+        text=' '.join([row['label'],row['summary']]+list(attrs.values())).casefold()
+        matched=[];missing=[]
+        for field,value in hints:
+            terms=[x for x in re.findall(r'\w+',value.casefold()) if len(x)>=3]
+            if not terms:continue
+            if all(term in text for term in terms):matched.append(field)
+            else:missing.append(field)
+        # Ordering is only an analyst triage heuristic, not a calibrated probability.
+        relevance=len(matched)*2+(1 if row['status']=='corroborated' else 0)
+        ranked.append({'id':row['id'],'label':row['label'],'provider':row['provider'],
+            'status':row['status'],'source_url':row['source_url'],
+            'signals':matched,'unmatchedClues':missing,'relevance':relevance})
+    ranked.sort(key=lambda r:(-r['relevance'],r['label'].casefold()))
+    return {'caseId':case_id,'subject':case['query'],'clues':context,
+        'hasDisambiguationClues':bool(hints),'candidates':ranked[:100],
+        'notice':'Heuristic sorting only. No account identity or source claim is automatically verified.'}
+
+@app.get('/api/cases/{case_id}/search-history')
+def case_searches(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        rows=c.execute('SELECT id,search_query,subject_type,providers_json,results_count,errors_count,created_at FROM search_history WHERE case_id=? ORDER BY created_at DESC LIMIT 100',(case_id,))
+        return {'items':[dict(r) for r in rows]}
+
+def save_chat(case_id,actor,body,question,response,provider):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        session=body.session_id
+        if session:
+            row=c.execute('SELECT owner_id FROM research_sessions WHERE id=? AND case_id=?',(session,case_id)).fetchone()
+            if not row or (row['owner_id']!=actor['id'] and actor['role']!='admin'):
+                raise HTTPException(404,'Research conversation not found.')
+        else:
+            session=uid()
+            c.execute('INSERT INTO research_sessions VALUES (?,?,?,?,?,?)',
+                (session,case_id,actor['id'],question[:95],iso_now(),iso_now()))
+        for role,value in (('user',question),('assistant',response['answer'])):
+            c.execute('INSERT INTO research_messages(id,session_id,role,content,provider,evidence_ids_json,web_leads_json,created_at) VALUES (?,?,?,?,?,?,?,?)',
+                (uid(),session,role,value,provider,
+                 json.dumps(response.get('evidenceIds',[]) if role=='assistant' else []),
+                 json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now()))
+        c.execute('UPDATE research_sessions SET updated_at=? WHERE id=?',(iso_now(),session))
+        return session
+
+@app.get('/api/cases/{case_id}/conversations')
+def conversations(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        rows=c.execute('SELECT id,title,created_at,updated_at FROM research_sessions WHERE case_id=? AND (? = \'admin\' OR owner_id=?) ORDER BY updated_at DESC LIMIT 50',
+          (case_id,actor['role'],actor['id']))
+        return {'items':[dict(r) for r in rows]}
+
+@app.get('/api/cases/{case_id}/conversations/{session_id}')
+def conversation(case_id:str,session_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        row=c.execute('SELECT id,title,owner_id FROM research_sessions WHERE id=? AND case_id=?',(session_id,case_id)).fetchone()
+        if not row or (row['owner_id']!=actor['id'] and actor['role']!='admin'):
+            raise HTTPException(404,'Conversation not found.')
+        messages=c.execute('SELECT role,content,provider,evidence_ids_json,web_leads_json,created_at FROM research_messages WHERE session_id=? ORDER BY created_at,id LIMIT 300',(session_id,))
+        return {'session':{'id':row['id'],'title':row['title']},'messages':[
+          {'role':r['role'],'text':r['content'],'provider':r['provider'],
+           'ids':json.loads(r['evidence_ids_json']),
+           'webLeads':json.loads(r['web_leads_json']),
+           'createdAt':r['created_at']} for r in messages]}
+
+class ClaimInput(BaseModel):
+    evidence_id:str=Field(min_length=1,max_length=64)
+    claim_text:str=Field(min_length=10,max_length=1200)
+    stance:Literal['supports','contradicts','context']='supports'
+
+@app.post('/api/cases/{case_id}/claims',status_code=201)
+def create_claim(case_id:str,body:ClaimInput,actor=Depends(protect)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        if not c.execute('SELECT id FROM evidence WHERE id=? AND case_id=?',(body.evidence_id,case_id)).fetchone():
+            raise HTTPException(422,'Source evidence does not belong to this case.')
+        claim_id=uid()
+        c.execute('INSERT INTO claim_links VALUES (?,?,?,?,?,?,?)',
+          (claim_id,case_id,body.evidence_id,body.claim_text.strip(),body.stance,actor['id'],iso_now()))
+    return {'id':claim_id}
+
+@app.get('/api/cases/{case_id}/claims')
+def list_claims(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as c:
+        case_or_404(c,case_id,actor)
+        rows=c.execute('SELECT l.id,l.claim_text,l.stance,l.created_at,e.label,e.source_url,e.status FROM claim_links l JOIN evidence e ON e.id=l.evidence_id WHERE l.case_id=? ORDER BY l.created_at DESC LIMIT 200',(case_id,))
+        return {'items':[dict(x) for x in rows]}
+
 @app.get('/api/audit')
 def audit_log(actor=Depends(actor_from_cookie)):
+    if actor['role']!='admin':raise HTTPException(403,'Administrator permission required.')
     with db.connect() as c:
         items=[dict(x) for x in c.execute('SELECT action,object_type,object_id,details,created_at FROM audit_events ORDER BY created_at DESC LIMIT 100')]
     return {'items':items}
