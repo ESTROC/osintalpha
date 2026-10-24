@@ -480,6 +480,9 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        if body.web_search:
+            from .analyst import extract_web_leads
+            response['webLeads']=extract_web_leads(output)
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records')
         return {'model':model,'provider':provider,**response,'remote':True,
