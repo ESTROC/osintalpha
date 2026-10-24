@@ -157,3 +157,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/UPSTREAM_MANIFEST.md]
 ## Cloud deployment
 
 For separated Vercel frontend / Render backend deployment, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not deploy with personal data using ephemeral Render Free storage.
+
+## Optional GroqCloud AI chat
+
+GroqCloud (Groq) and xAI (Grok) are different services. The backend now supports both without exposing API keys to the frontend. Configure `GROQ_API_KEY` and optionally `GROQ_MODEL=openai/gpt-oss-120b` in the Render service Environment tab (or in your local private `.env`). After restarting/redeploying, sign in, create a synthetic case with **remote AI opt-in**, open **Case AI Chat**, and choose **GroqCloud**. Model availability/quotas depend on your Groq account; consult https://console.groq.com/docs/models . Never commit keys to GitHub or enter them in Vercel environment variables. Existing cases created without remote AI consent do not allow this mode.

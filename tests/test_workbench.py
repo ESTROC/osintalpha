@@ -132,3 +132,38 @@ def test_geo_source_failure_is_explicit(client,auth,monkeypatch):
     monkeypatch.setattr(main,'geo_events',boom)
     r=client.get('/api/geo/events?feed=nasa')
     assert r.status_code==502 and r.json()['status']=='unavailable'
+
+def test_groq_missing_key_and_consent(client,auth,case,monkeypatch):
+    r=client.post('/api/cases/'+case+'/chat',headers=auth,json={'question':'Summarize the evidence','provider':'groq'})
+    assert r.status_code==409
+    monkeypatch.setenv('GROQ_API_KEY','fake-groq-test-key')
+    r=client.post('/api/cases/'+case+'/chat',headers=auth,json={'question':'Summarize the evidence','provider':'groq'})
+    assert r.status_code==403
+
+
+def test_groq_chat_uses_provider_endpoint(client,auth,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','fake-groq-test-key')
+    c=client.post('/api/cases',headers=auth,json={'title':'Synthetic AI Chat Case','subject_type':'person',
+        'query':'Demo Person','purpose':'Authorized demonstration of controlled AI summary',
+        'authority_confirmed':True,'ai_opt_in':True})
+    assert c.status_code==201
+    case_id=c.json()['id']
+    from app import main
+    import httpx
+    class FakeResponse:
+        def raise_for_status(self): return None
+        def json(self): return {'choices':[{'message':{'content':'No evidence is available.'}}]}
+    class FakeClient:
+        def __init__(self,*args,**kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self,*args): return None
+        async def post(self,url,json,headers):
+            assert url=='https://api.groq.com/openai/v1/chat/completions'
+            assert json['model']=='openai/gpt-oss-120b'
+            assert headers['Authorization']=='Bearer fake-groq-test-key'
+            return FakeResponse()
+    monkeypatch.setattr(main.httpx,'AsyncClient',FakeClient)
+    r=client.post('/api/cases/'+case_id+'/chat',headers=auth,json={'question':'Summarize case evidence','provider':'groq'})
+    assert r.status_code==200, r.text
+    assert r.json()['provider']=='groq'
+    assert r.json()['remote'] is True
