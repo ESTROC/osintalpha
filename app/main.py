@@ -573,25 +573,7 @@ def admin_only(actor):
         raise HTTPException(403,'Administrator permission required.')
 
 class CreateUser(BaseModel):
-    username:str=Field(min_length=3,max_length=60,pattern=r'^[A-Za-z0-9_.-]+
-def audit_log(actor=Depends(actor_from_cookie)):
-    if actor['role']!='admin':raise HTTPException(403,'Administrator permission required.')
-    with db.connect() as c:
-        items=[dict(x) for x in c.execute('SELECT action,object_type,object_id,details,created_at FROM audit_events ORDER BY created_at DESC LIMIT 100')]
-    return {'items':items}
-
-
-@app.middleware('http')
-async def security_headers(req:Request,call_next):
-    res=await call_next(req)
-    res.headers['X-Content-Type-Options']='nosniff'
-    res.headers['Referrer-Policy']='strict-origin-when-cross-origin'
-    res.headers['X-Frame-Options']='DENY'
-    res.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
-    if req.url.path == '/' or req.url.path.startswith('/assets/'):
-        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-    return res
-)
+    username:str=Field(min_length=3,max_length=60,pattern=r'^[A-Za-z0-9_.-]+$')
     password:str=Field(min_length=12,max_length=160)
     role:Literal['admin','analyst']='analyst'
 
