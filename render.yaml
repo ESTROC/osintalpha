@@ -11,6 +11,10 @@ services:
     autoDeployTrigger: commit
     healthCheckPath: /api/health
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: osintalpha-research-v3
+          property: connectionString
       - key: OSINTALPHA_ADMIN_PASSWORD
         generateValue: true
       - key: OSINTALPHA_SECURE_COOKIE
