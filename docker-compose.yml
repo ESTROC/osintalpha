@@ -1,0 +1,14 @@
+services:
+  workbench:
+    build: .
+    env_file:
+      - .env
+    environment:
+      OSINTALPHA_DB_PATH: /srv/app/instance/osintalpha.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - workbench-db:/srv/app/instance
+    restart: unless-stopped
+volumes:
+  workbench-db:
