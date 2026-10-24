@@ -18,9 +18,12 @@ export default async function handler(req, res) {
     return res.status(503).json({detail: 'Backend origin is invalid.'});
   }
   const incoming = new URL(req.url, 'https://frontend.invalid');
-  if (!incoming.pathname.startsWith('/api/'))
+  const target = req.query?.target;
+  const suffix = Array.isArray(target) ? target.join('/') : String(target || '');
+  if (!suffix || !/^[a-z0-9_./-]+$/i.test(suffix) || suffix.split('/').includes('..'))
     return res.status(404).json({detail:'Not found'});
-  const dest = new URL(incoming.pathname + incoming.search, origin);
+  incoming.searchParams.delete('target');
+  const dest = new URL('/api/' + suffix + incoming.search, origin);
   const blocked = new Set(['host','connection','content-length','transfer-encoding','accept-encoding']);
   const headers = new Headers();
   for (const [key,value] of Object.entries(req.headers || {})) {

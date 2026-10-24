@@ -3,11 +3,15 @@
   "version": 2,
   "framework": null,
   "functions": {
-    "api/[...path].js": {
+    "api/proxy.js": {
       "maxDuration": 60
     }
   },
   "rewrites": [
+    {
+      "source": "/api/:target*",
+      "destination": "/api/proxy?target=:target*"
+    },
     {
       "source": "/assets/:path*",
       "destination": "/:path*"
