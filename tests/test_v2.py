@@ -34,7 +34,7 @@ def test_internetdb_passive_enrichment():
     assert rows[0].raw["mode"]=="passive"
     assert rows[0].raw["verified"] is False
     assert rows[0].raw["ports"]==[53,443]
-    assert "not" in rows[0].summary.lower()
+    assert "never treat cve presence as verified vulnerability" in rows[0].summary.lower()
     try:
         asyncio.run(internetdb(Stub(),"10.0.0.8","ip"))
         assert False,"Expected AdapterError"
