@@ -84,9 +84,9 @@ CREATE TABLE IF NOT EXISTS research_messages (
  id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
  role TEXT NOT NULL,content TEXT NOT NULL,provider TEXT NOT NULL DEFAULT '',
  evidence_ids_json TEXT NOT NULL DEFAULT '[]',web_leads_json TEXT NOT NULL DEFAULT '[]',
- created_at TEXT NOT NULL
+ created_at TEXT NOT NULL, message_index INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,created_at);
+CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,message_index);
 CREATE TABLE IF NOT EXISTS search_history (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),search_query TEXT NOT NULL,
@@ -110,10 +110,14 @@ def init_db():
     with connect() as c:
         if not is_postgres():c.execute('PRAGMA journal_mode=WAL')
         c.executescript(SCHEMA)
-        if is_postgres():c.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1')
+        if is_postgres():
+            c.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1')
+            c.execute('ALTER TABLE research_messages ADD COLUMN IF NOT EXISTS message_index INTEGER NOT NULL DEFAULT 0')
         else:
             columns={r['name'] for r in c.execute('PRAGMA table_info(users)')}
             if 'active' not in columns:c.execute('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
+            msg_columns={r['name'] for r in c.execute('PRAGMA table_info(research_messages)')}
+            if 'message_index' not in msg_columns:c.execute('ALTER TABLE research_messages ADD COLUMN message_index INTEGER NOT NULL DEFAULT 0')
         password=os.getenv('OSINTALPHA_ADMIN_PASSWORD','')
         if len(password)<12:raise RuntimeError('Set OSINTALPHA_ADMIN_PASSWORD to >=12 characters')
         if not c.execute('SELECT id FROM users WHERE username=?',('admin',)).fetchone():
