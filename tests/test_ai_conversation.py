@@ -126,3 +126,42 @@ def test_crossref_filters_partial_matches_across_different_authors():
     assert len(rows)==1
     assert rows[0].label=='Name match'
     assert rows[0].raw['identity_verified'] is False
+
+
+
+def test_web_search_requires_explicit_groq_consent(client,auth,case,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','fake-groq-for-test')
+    body={'question':'Find public search leads','provider':'groq','web_search':True}
+    assert client.post('/api/cases/'+case+'/chat',headers=auth,json=body).status_code==403
+    assert client.post('/api/cases/'+case+'/chat',headers=auth,json={
+        'question':'Find public search leads','provider':'local','web_search':True}).status_code==422
+
+
+def test_groq_browser_tool_only_on_explicit_opt_in(client,auth,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','fake-groq-for-test')
+    c=client.post('/api/cases',headers=auth,json={
+        'title':'Authorized web-research example','subject_type':'person',
+        'query':'Example Person','purpose':'Authorized public-source exploration of a fictional profile',
+        'authority_confirmed':True,'ai_opt_in':True})
+    assert c.status_code==201
+    id=c.json()['id']
+    class Response:
+        def raise_for_status(self):return None
+        def json(self):return {'choices':[{'message':{'content':'Several public namesakes may exist; which city?'}}]}
+    class Client:
+        def __init__(self,*a,**kw):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*a):return None
+        async def post(self,url,json,headers):
+            assert json['tools']==[{'type':'browser_search'}]
+            assert json['tool_choice']=='required'
+            assert 'response_format' not in json
+            assert json['reasoning_effort']=='low'
+            assert 'Bearer fake-groq-for-test'==headers['Authorization']
+            return Response()
+    monkeypatch.setattr(main.httpx,'AsyncClient',Client)
+    r=client.post('/api/cases/'+id+'/chat',headers=auth,json={
+       'question':'Look for public sources about the name','provider':'groq','web_search':True})
+    assert r.status_code==200,r.text
+    assert r.json()['webSearch'] is True
+    assert r.json()['evidenceIds']==[]
