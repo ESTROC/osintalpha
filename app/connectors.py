@@ -5,6 +5,8 @@ No arbitrary URL fetch, stealth scraping, private-camera access, or source-drive
 from __future__ import annotations
 import asyncio
 import hashlib
+import html
+import re
 import json
 import ipaddress
 import re
@@ -43,6 +45,7 @@ class Connector:
 
 CATALOG = [
     Connector('github', 'GitHub public profiles', ('person', 'organization'), 'Candidate users and organizations; handles are not identity proof.', 'https://docs.github.com/en/rest/search/search', 'Rate-limited public API'),
+    Connector('stackoverflow', 'Stack Overflow public profiles', ('person',), 'Public account-name candidates from Stack Exchange; not identity verification.', 'https://api.stackexchange.com/docs/users', 'Public API; request quotas and availability vary'),
     Connector('openalex', 'OpenAlex authors', ('person',), 'Researcher records and affiliations; name matches are candidates.', 'https://help.openalex.org/api/', 'Free basic budget, limits apply'),
     Connector('crossref', 'Crossref publications', ('person',), 'Publication discovery, not degree validation.', 'https://www.crossref.org/documentation/retrieve-metadata/rest-api/', 'Public metadata API'),
     Connector('gleif', 'GLEIF legal entities', ('organization',), 'Legal Entity Identifier records; no LEI does not mean no company.', 'https://www.gleif.org/en/lei-data/gleif-api/', 'Public LEI reference data'),
@@ -78,11 +81,84 @@ async def get_json(client: httpx.AsyncClient, url: str, params: dict | None = No
 
 
 async def github(client, query, subject_type):
-    q = f'{query} in:fullname type:user' if subject_type == 'person' and '@' not in query else (f'{query} in:email type:user' if subject_type == 'person' else f'{query} type:org')
-    obj = await get_json(client, 'https://api.github.com/search/users', {'q': q, 'per_page': 8})
-    return [canon_record(x.get('login'), 'Public GitHub account candidate; account ownership not established.',
-             x.get('html_url'), str(x.get('id')), {'login': x.get('login'), 'type': x.get('type'), 'id': x.get('id')})
-            for x in obj.get('items', [])[:8]]
+    """Search public GitHub display names, then enrich candidates from public profiles."""
+    words=[w for w in re.split(r'\s+',query.strip()) if w]
+    if not words:
+        return []
+    kind='user' if subject_type=='person' else 'org'
+    # Official GitHub user-search qualifier is in:name, NOT in:fullname.
+    search_q=f'{" ".join(words)} in:name type:{kind}'
+    obj=await get_json(client,'https://api.github.com/search/users',{'q':search_q,'per_page':12})
+    accounts=[row for row in obj.get('items',[]) if isinstance(row,dict)][:12]
+    if not accounts:
+        # Username-only fallback if a public account doesn't expose a real name.
+        compact=''.join(words)
+        obj=await get_json(client,'https://api.github.com/search/users',{'q':f'{compact} in:login type:{kind}','per_page':8})
+        accounts=[row for row in obj.get('items',[]) if isinstance(row,dict)][:8]
+    async def enrich(row):
+        login=str(row.get('login') or '')
+        if not re.fullmatch(r'[A-Za-z0-9-]{1,39}',login):
+            return None
+        public_profile={}
+        try:
+            # A search result is already a candidate; enrichment is best-effort
+            # and must not discard leads when profile API is rate-limited.
+            public_profile=await get_json(client,'https://api.github.com/users/'+login)
+        except (AdapterError,httpx.HTTPError,ValueError):
+            pass
+        display=str(public_profile.get('name') or login).strip()[:140]
+        parts=[str(public_profile[k]).strip()[:120] for k in ('bio','company','location')
+               if public_profile.get(k)]
+        if public_profile.get('public_repos') is not None:
+            parts.append(f"Public repositories: {public_profile.get('public_repos')}")
+        summary=('Public GitHub account candidate (@'+login+'). '+
+                 (' | '.join(parts)+'. ' if parts else '')+
+                 'No ownership or identity match has been established.')
+        return canon_record(display,summary,
+            'https://github.com/'+login,str(row.get('id') or login),
+            {'login':login,'display_name':display,
+             'bio':str(public_profile.get('bio') or '')[:200],
+             'company':str(public_profile.get('company') or '')[:150],
+             'location':str(public_profile.get('location') or '')[:100],
+             'public_repos':public_profile.get('public_repos'),
+             'kind':kind,'identity_verified':False})
+    items=await asyncio.gather(*(enrich(a) for a in accounts[:8]))
+    return [x for x in items if x is not None]
+
+
+async def stackoverflow(client, query, subject_type):
+    """Public Stack Overflow user display names; not verified as this individual."""
+    q=' '.join(query.strip().split())
+    if len(q)<3:
+        return []
+    obj=await get_json(client,'https://api.stackexchange.com/2.3/users',
+        {'site':'stackoverflow','inname':q,'sort':'reputation','order':'desc','pagesize':20})
+    if not isinstance(obj,dict):
+        raise AdapterError('Stack Exchange returned an unexpected response.')
+    if obj.get('error_id'):
+        raise AdapterError('Stack Exchange rejected the search: '+str(obj.get('error_name','unknown')))
+    wanted=[w.casefold() for w in q.split() if len(w)>=2]
+    candidates=[]
+    for row in obj.get('items',[])[:20]:
+        if not isinstance(row,dict): continue
+        name=html.unescape(str(row.get('display_name') or '')).strip()
+        # Only retain full-token matches, avoiding unrelated namesakes.
+        tokens=re.findall(r'\w+',name.casefold())
+        if not name or not all(word in tokens for word in wanted):
+            continue
+        uid=row.get('user_id')
+        if not isinstance(uid,int) or uid<=0: continue
+        profile='https://stackoverflow.com/users/'+str(uid)
+        rep=row.get('reputation')
+        location=html.unescape(str(row.get('location') or ''))[:100]
+        summary=(f'Public Stack Overflow profile candidate; reputation: {rep if isinstance(rep,int) else "unknown"}.'+
+                 (f' Listed location: {location}.' if location else '')+
+                 ' Public display-name match only; identity and account ownership are unverified.')
+        candidates.append(canon_record(name,summary,profile,str(uid),
+            {'user_id':uid,'display_name':name,'reputation':rep,
+             'location':location,'identity_verified':False}))
+        if len(candidates)>=8:break
+    return candidates
 
 
 async def openalex(client, query, subject_type):
@@ -158,7 +234,7 @@ async def gdelt(client, query, subject_type):
                link,link,{'title':row.get('title'),'domain':row.get('domain'),'seendate':row.get('seendate')},row.get('seendate')))
     return out
 
-FUNCTIONS = {'wikidata':wikidata, 'gdelt':gdelt,'github': github, 'openalex': openalex, 'crossref': crossref, 'gleif': gleif, 'wikipedia': wikipedia}
+FUNCTIONS = {'wikidata':wikidata, 'gdelt':gdelt,'github': github, 'stackoverflow':stackoverflow, 'openalex': openalex, 'crossref': crossref, 'gleif': gleif, 'wikipedia': wikipedia}
 
 
 async def collect_one(provider, query, subject_type, client=None):

@@ -199,7 +199,7 @@ def sources(actor=Depends(actor_from_cookie)):
 
 
 class CollectInput(BaseModel):
-    providers: list[str] = Field(min_length=1, max_length=5)
+    providers: list[str] = Field(min_length=1, max_length=8)
 
 
 @app.post('/api/cases/{case_id}/collect')
@@ -207,7 +207,7 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
     with db.connect() as c:
         case=case_or_404(c,case_id)
     providers=list(dict.fromkeys(body.providers))
-    if len(providers)>5: raise HTTPException(422,'At most five sources per run.')
+    if len(providers)>8: raise HTTPException(422,'At most eight sources per run.')
     allowed={s.id for s in CATALOG if case['subject_type'] in s.scope}
     if any(p not in allowed for p in providers): raise HTTPException(422,'Incompatible or unknown source selection.')
     async with httpx.AsyncClient(timeout=15, headers={'User-Agent':'OSINT AlphaIntelligenceWorkbench/1.0 (authorized research)'},follow_redirects=False) as client:
