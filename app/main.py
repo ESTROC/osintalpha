@@ -425,9 +425,10 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     if not key:
         raise HTTPException(409,
             f'{provider.upper()} selected, but {keyname} is not configured on Render. '
-            'Your other provider key cannot be used for this service.')
+            'Your other provider key cannot be used for this service. '
+            +('Choose GroqCloud if you have GROQ_API_KEY.' if provider=='grok' else 'Check your Render environment.'))
     if not ca['ai_opt_in']:
-        raise HTTPException(403,'Remote AI is disabled for this case. Explicitly enable it in the case assistant before retrying.')
+        raise HTTPException(403,f'Remote {provider} AI is disabled for this case. Explicitly enable it in the case assistant before retrying.')
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
              'evidence':records[:35],
