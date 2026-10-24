@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v2 research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'e.g. Jane Researcher',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'e.g. Example Systems Ltd',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'e.g. example.org',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'e.g. 8.8.8.8',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -44,7 +44,7 @@ function caseAssistant(){
  )+'</div>';
  const messages=s.messages.length?s.messages.map(m=>'<div class="message '+m.role+'"><div class="bubble">'+
   (m.role==='assistant'?rich(m.text):'<p>'+h(m.text)+'</p>')+'</div>'+
-  (m.role==='assistant'?'<div class="message-foot">'+h(m.model||'Assistant')+(m.error?' · Request failed':' · Sources require review')+'</div>'+
+  (m.role==='assistant'?'<div class="message-foot">'+h(m.model||'Assistant')+(m.webSearch?' · Public web search':'')+(m.error?' · Request failed':' · Sources require review')+'</div>'+
    (m.followUp?'<button class="btn small subtle" data-question="'+h(m.followUp)+'" style="justify-content:flex-start;white-space:normal;text-align:left">'+h(m.followUp)+' →</button>':'')+
    '<div class="citation-row">'+citations(m.ids)+'</div>':'')+'</div>').join(''):
   '<div class="empty"><div class="large">Tell me what you want to verify</div><p>For a common name, start with a city, organization, public handle or known profile. The assistant will ask for one distinguishing clue rather than invent a biography.</p></div>';
@@ -58,7 +58,9 @@ function caseAssistant(){
  '<label class="field-label" for="ai-provider">Reasoning mode</label><select id="ai-provider"><option value="local" '+(p==='local'?'selected':'')+'>Offline guidance · Not AI</option><option value="groq" '+(p==='groq'?'selected':'')+'>GroqCloud · '+(s.server.groqConfigured?'AI ready':'No API key')+'</option><option value="grok" '+(p==='grok'?'selected':'')+'>xAI Grok · '+(s.server.aiConfigured?'AI ready':'No API key')+'</option></select>'+
  needsConsent+'<div class="divider"></div><div class="eyebrow">SMART STARTERS</div>'+
  ['Who is '+c.query+'?','I think these publications belong to different people.','Which sources support this identity?','What identifying detail should I provide?'].map(q=>'<button type="button" class="btn small subtle wide" style="white-space:normal;text-align:left;justify-content:flex-start" data-question="'+h(q)+'">'+h(q)+'</button>').join('')+
- '<p class="help">Different people can share the same name. Only candidate source records are available. A model does not independently verify identity.</p></div></aside></div>';
+ '<label class="check" style="margin-top:6px"><input type="checkbox" id="research-web" '+(s.webSearch?'checked':'')+' '+(p==='groq'&&c.ai_opt_in&&s.server.groqConfigured?'':'disabled')+'> Search public web with Groq browser tool for this message</label>'+
+ '<p class="help">Web search is optional, may use additional quota, and returns unverified third-party leads. Results are not automatically added to the case evidence database.</p>'+
+ '<p class="help">Different people can share the same name. A model does not independently verify identity.</p></div></aside></div>';
 }
 function caseGraph(){return '<div class="panel"><div class="panel-head"><div class="panel-title">Source-linked provenance</div><div class="panel-meta">Connections are collection relationships, not confirmed identity links</div></div><div class="panel-pad"><div class="flow"><span class="step">'+h(s.case.case.query)+'</span><span class="arrow">→</span>'+(s.case.evidence||[]).slice(0,12).map(e=>'<span class="step">'+h(e.provider)+': '+h(e.label.slice(0,28))+'</span>').join('<span class="arrow">→</span>')+'</div><div class="insight"><h3>How to read this view</h3><p>These are case-to-record relationships. No unverified account has been merged into a person or company identity automatically.</p></div></div></div>'}
 function caseReports(){const id=h(s.id);return '<div class="grid-equal"><section class="panel"><div class="panel-head"><div class="panel-title">Export evidence</div></div><div class="panel-pad"><p class="page-sub">Reports retain sources, timestamps, notes and uncertainty.</p><div class="reportlinks" style="margin-top:18px"><a class="btn primary" target="_blank" rel="noopener" href="/api/cases/'+id+'/report.pdf">Download PDF report →</a><a class="btn" target="_blank" rel="noopener" href="/api/cases/'+id+'/report.html">Printable HTML report ↗</a><a class="btn" target="_blank" rel="noopener" href="/api/cases/'+id+'/report.json">Structured JSON export ↗</a></div></div></section><section class="panel"><div class="panel-head"><div class="panel-title">What a report means</div></div><div class="panel-pad"><div class="callout warn">An export is not an official identity check, vulnerability validation or criminal allegation. Inspect source evidence and record uncertainty.</div></div></section></div>'}
@@ -71,7 +73,7 @@ function drawMap(){const el=document.getElementById('geo-map');if(!el)return;if(
 map=window.L.map(el,{worldCopyJump:true}).setView([18,8],2);window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:17}).addTo(map);const bounds=[];marks={};s.geo.forEach((x,k)=>{const lat=Number(x.lat),lon=Number(x.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;const marker=window.L.circleMarker([lat,lon],{radius:5,color:'#a2b4ff',weight:1.4,fillOpacity:.7}).addTo(map);marker.bindPopup('<strong>'+h(x.name||'Observation')+'</strong><p>'+h(x.provider)+'</p>'+link(x.url,'Original source'));marks[k]=marker;bounds.push([lat,lon])});if(bounds.length&&bounds.length<400)map.fitBounds(bounds,{padding:[32,32],maxZoom:6})}
 function render(){if(!s.user){login();return}app.innerHTML=frame(({home,cases,case:casePage,world,sources,settings}[s.where]||home)());if(s.where==='world')setTimeout(drawMap,0);if(s.where==='case'&&s.tab==='assistant'){const e=document.getElementById('chat-history');if(e)e.scrollTop=e.scrollHeight}}
 async function refreshCases(){const [ca,ov]=await Promise.all([api('/api/cases'),api('/api/overview')]);s.cases=ca.items||[];s.overview=ov}
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.selected=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.selected=null;s.webSearch=false;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';render()}
 async function fetchCase(){const [ca,brief]=await Promise.all([api('/api/cases/'+s.id),api('/api/cases/'+s.id+'/brief')]);s.case=ca;s.brief=brief;render()}
 async function collect(){const allowed=s.sources.filter(x=>x.scope.includes(s.case.case.subject_type)).map(x=>x.id).slice(0,5);if(!allowed.length)throw Error('No collectors available for this type.');s.busy=true;render();try{const out=await api('/api/cases/'+s.id+'/collect',{method:'POST',body:{providers:allowed}});await Promise.all([fetchCase(),refreshCases()]);const failures=(out.results||[]).filter(x=>x.status==='error').length;toast(allowed.length+' source(s) checked; '+failures+' reported error(s).',failures>0)}finally{s.busy=false;render()}}
 async function launch(form){const d=Object.fromEntries(new FormData(form).entries());s.busy=true;render();try{const ca=await api('/api/cases',{method:'POST',body:{title:modes[s.mode].name+' · '+d.query.trim(),subject_type:s.mode,query:d.query.trim(),purpose:d.purpose.trim(),authority_confirmed:!!d.authority,ai_opt_in:!!d.ai_opt_in}});await refreshCases();await openCase(ca.id);try{await collect()}catch(err){toast('Case created, but source lookup failed: '+err.message,true)}}finally{s.busy=false;render()}}
@@ -91,7 +93,7 @@ else if(t.dataset.question){const input=document.querySelector('#ask-form textar
 else if(t.hasAttribute('data-consent')){await api('/api/cases/'+s.id+'/ai-consent',{method:'PUT',body:{enabled:true}});await fetchCase();s.provider=s.server.groqConfigured?'groq':s.server.aiConfigured?'grok':'local';render();toast('Remote AI enabled for this case. Select the provider and ask your question.')}
 else if(t.hasAttribute('data-logout')){await api('/api/auth/logout',{method:'POST'});s.user=null;login()}
 }catch(err){toast(err.message,true)}});
-document.addEventListener('change',async e=>{if(e.target.id==='ai-provider'){s.provider=e.target.value;render()}if(e.target.id==='geo-feed'){s.feed=e.target.value;await loadGeo()}});
+document.addEventListener('change',async e=>{if(e.target.id==='ai-provider'){s.provider=e.target.value;render()}if(e.target.id==='geo-feed'){s.feed=e.target.value;await loadGeo()}if(e.target.id==='research-web'){s.webSearch=!!e.target.checked;render()}});
 document.addEventListener('submit',async e=>{const f=e.target;if(!['login-form','start-form','review-form','manual-form','ask-form'].includes(f.id))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
@@ -108,9 +110,9 @@ if(f.id==='ask-form'){
  const history=s.messages.slice(-8).map(m=>({role:m.role,content:m.text.slice(0,2000)}));
  s.messages.push({role:'user',text:q});s.busy=true;render();
  const r=await api('/api/cases/'+s.id+'/chat',
-   {method:'POST',body:{provider:s.provider,question:q,history}});
+   {method:'POST',body:{provider:s.provider,question:q,history,web_search:!!(s.webSearch&&s.provider==='groq')}});
  s.messages.push({role:'assistant',text:r.answer,model:r.model,ids:r.evidenceIds||[],
-                  followUp:r.followUp||'',needsDisambiguation:!!r.needsDisambiguation});
+                  followUp:r.followUp||'',needsDisambiguation:!!r.needsDisambiguation,webSearch:!!r.webSearch});
  s.busy=false;render();
 }
 }catch(err){s.busy=false;toast(err.message,true);if(f.id==='login-form'){const el=document.getElementById('login-error');if(el)el.textContent=err.message}else if(f.id==='ask-form'){s.messages.push({role:'assistant',text:'The AI provider could not complete this request: '+err.message,model:'Provider error',error:true});render()}}finally{if(button)button.disabled=false}});
