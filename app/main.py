@@ -379,6 +379,7 @@ class ChatMessage(BaseModel):
     use_grok:bool=False
     provider:Literal['local','groq','grok']|None=None
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
+    web_search:bool=False
 
 
 class ConsentUpdate(BaseModel):
@@ -411,6 +412,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     from .analyst import offline_guidance, make_system_prompt, normalize_ai_response, GROQ_RESPONSE_SCHEMA
     ca,ev,runs=load_report(case_id)
     provider=body.provider or ('grok' if body.use_grok else 'local')
+    if body.web_search and provider!='groq':
+        raise HTTPException(422,'Public web research requires GroqCloud and explicit provider selection.')
     records=chat_evidence(ev)
     history=chat_history(body)
     question=body.question.strip()
@@ -426,14 +429,17 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         raise HTTPException(409,
             f'{provider.upper()} selected, but {keyname} is not configured on Render. '
             'Your other provider key cannot be used for this service. '
-            +('Choose GroqCloud if you have GROQ_API_KEY.' if provider=='grok' else 'Check your Render environment.'))
+            +('choose GroqCloud if you have GROQ_API_KEY.' if provider=='grok' else 'Check your Render environment.'))
     if not ca['ai_opt_in']:
         raise HTTPException(403,f'Remote {provider} AI is disabled for this case. Explicitly enable it in the case assistant before retrying.')
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
              'evidence':records[:35],
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
-    system=make_system_prompt()
+    model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
+    if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
+        raise HTTPException(409,'Groq browser search currently requires a GPT-OSS model.')
+    system=make_system_prompt(web_search=body.web_search)
     if provider=='groq':
         model=os.getenv('GROQ_MODEL','openai/gpt-oss-120b')
         messages=[{'role':'system','content':system},
@@ -441,9 +447,16 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         messages+=history+[{'role':'user','content':question}]
         payload={'model':model,'messages':messages,'max_completion_tokens':2400}
         if model in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
-            payload['reasoning_effort']='medium'
-            payload['response_format']={'type':'json_schema','json_schema':{
-                'name':'evidence_analysis','strict':True,'schema':GROQ_RESPONSE_SCHEMA}}
+            payload['reasoning_effort']='low' if body.web_search else 'medium'
+            if body.web_search:
+                # Groq browser_search is an actual upstream search tool and is
+                # incompatible with JSON-schema structured output.
+                payload['tools']=[{'type':'browser_search'}]
+                payload['tool_choice']='required'
+                payload['citation_options']='enabled'
+            else:
+                payload['response_format']={'type':'json_schema','json_schema':{
+                    'name':'evidence_analysis','strict':True,'schema':GROQ_RESPONSE_SCHEMA}}
         endpoint='https://api.groq.com/openai/v1/chat/completions'
     else:
         model=os.getenv('XAI_MODEL','grok-4.7')
@@ -470,7 +483,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records')
         return {'model':model,'provider':provider,**response,'remote':True,
-                'note':'Model output is not independent verification. Check original evidence.'}
+                'webSearch':bool(body.web_search),
+                'note':'Search output is a lead, not independent identity verification. Check original sources.'}
     except httpx.HTTPStatusError as exc:
         code=exc.response.status_code
         if code==401: message='The provider rejected the API key. Check its key and account.'
