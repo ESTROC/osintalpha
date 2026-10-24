@@ -118,3 +118,43 @@ def offline_guidance(question,case,records,runs,history):
          'Do not treat candidate publication author names as a confirmed match.')
     return {'answer':msg,'evidenceIds':[],'followUp':ask if person else '',
             'needsDisambiguation':person}
+
+
+def extract_web_leads(answer: str, *, limit: int = 8) -> list[dict]:
+    """Extract unverified public URL suggestions from a model answer.
+
+    This does not fetch or authenticate URLs. Never treat a model-supplied URL
+    as proof of the page contents or subject identity; analyst must opt in to
+    adding it to a case as an unverified manual lead.
+    """
+    import ipaddress
+    from urllib.parse import urlsplit, urlunsplit
+    found = []
+    seen = set()
+    links = re.findall(r'\[([^\]\n]{2,140})\]\((https?://[^\s)]+)\)', answer)
+    if not links:
+        links = [('Web source candidate',u) for u in re.findall(r'https?://[^\s<>"\])]+',answer)]
+    for title, raw in links:
+        raw=raw.rstrip('.,;!')
+        try:
+            parts=urlsplit(raw)
+            hostname=(parts.hostname or '').lower().rstrip('.')
+            if parts.scheme!='https' or not hostname or parts.username or parts.password:
+                continue
+            if len(raw)>480 or not ('.' in hostname):
+                continue
+            try:
+                ip=ipaddress.ip_address(hostname)
+                if not ip.is_global:continue
+            except ValueError:
+                if hostname.endswith(('.local','.internal','.localhost','.test','.example','.invalid')):
+                    continue
+            cleaned=urlunsplit((parts.scheme,parts.netloc,parts.path,parts.query,''))
+            if cleaned in seen:continue
+            seen.add(cleaned)
+            found.append({'url':cleaned,'title':title.strip()[:140],
+                          'status':'suggested','verification':'Not fetched or verified by OSINT Alpha'})
+            if len(found)>=limit:break
+        except ValueError:
+            continue
+    return found
