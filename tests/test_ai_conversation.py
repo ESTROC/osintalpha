@@ -165,3 +165,46 @@ def test_groq_browser_tool_only_on_explicit_opt_in(client,auth,monkeypatch):
     assert r.status_code==200,r.text
     assert r.json()['webSearch'] is True
     assert r.json()['evidenceIds']==[]
+
+
+
+def test_web_leads_are_unverified_and_only_public_https():
+    from app.analyst import extract_web_leads
+    answer=(
+      'Public sources: [Portfolio](https://profiles.example.org/staff/ayush) '
+      '[Local router](https://192.168.0.1/) '
+      '[HTTP source](http://insecure.example.org) '
+      '[Credentialed](https://user:secret@phishing.example.net) '
+      '[Portfolio](https://profiles.example.org/staff/ayush).'
+    )
+    links=extract_web_leads(answer)
+    assert len(links)==1
+    assert links[0]['title']=='Portfolio'
+    assert links[0]['verification']=='Not fetched or verified by OSINT Alpha'
+
+
+def test_browser_response_exposes_reviewable_leads_without_auto_saving(client,auth,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','fake-groq-for-test')
+    case_id=client.post('/api/cases',headers=auth,json={
+       'title':'Synthetic web candidate case','subject_type':'person','query':'Example Person',
+       'purpose':'Authorized evaluation of public search snippets',
+       'authority_confirmed':True,'ai_opt_in':True}).json()['id']
+    class Response:
+        def raise_for_status(self):return None
+        def json(self):return {'choices':[{'message':{'content':
+           'This profile is only a possible match: [Public CV](https://university.example.org/people/sample).'}}]}
+    class Client:
+        def __init__(self,*a,**kw):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*a):return None
+        async def post(self,url,json,headers):
+            assert json['tools']==[{'type':'browser_search'}]
+            return Response()
+    monkeypatch.setattr(main.httpx,'AsyncClient',Client)
+    result=client.post('/api/cases/'+case_id+'/chat',headers=auth,json={
+       'question':'Find professional profiles','provider':'groq','web_search':True})
+    assert result.status_code==200,result.text
+    d=result.json()
+    assert d['webLeads'][0]['title']=='Public CV'
+    assert d['webLeads'][0]['status']=='suggested'
+    assert client.get('/api/cases/'+case_id).json()['evidence']==[]
