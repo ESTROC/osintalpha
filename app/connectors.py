@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import ipaddress
+import re
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -260,3 +262,88 @@ async def caltrans_cameras(client=None):
            'url':'https://cwwp2.dot.ca.gov/vm/','feedUrl':attrs.get('currentImageURL'),
            'observedAt':None,'value':attrs.get('county') or 'Image capture time not established'})
     return out
+
+
+# V2: read-only, fixed-host defensive enrichment. These are integrated adapters,
+# NOT claims that external security tools have been installed.
+DOMAIN_PATTERN = re.compile(r'^(?=.{4,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$')
+
+def valid_domain(value: str) -> bool:
+    value=value.strip().rstrip('.')
+    return bool(DOMAIN_PATTERN.fullmatch(value)) and not value.lower().endswith(('.local','.internal','.localhost','.test','.example','.invalid'))
+
+def valid_public_ip(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value.strip()).is_global
+    except ValueError:
+        return False
+
+async def dns_records(client, query, kind):
+    """Google Public DNS-over-HTTPS, three limited DNS record types, no active scan."""
+    domain=query.strip().rstrip('.').lower()
+    if not valid_domain(domain):
+        raise AdapterError('Enter a valid public domain, without URL paths or wildcards.')
+    out=[]
+    for record_type in ('A','MX','NS'):
+        obj=await get_json(client,'https://dns.google/resolve',{'name':domain,'type':record_type})
+        status=obj.get('Status')
+        if status not in (0,3):
+            raise AdapterError('DNS lookup returned an error status: '+str(status))
+        answers=[x for x in (obj.get('Answer') or []) if isinstance(x,dict)]
+        values=[str(a.get('data','')).strip()[:180] for a in answers if a.get('data')]
+        if values:
+            out.append(canon_record(f'{record_type} records · {domain}',
+                    f'{len(values)} public DNS answer(s): '+', '.join(values[:8])+
+                    '. DNS observations can change and do not establish domain ownership.',
+                    'https://dns.google/query?name='+domain+'&type='+record_type,domain+':'+record_type,
+                    {'domain':domain,'recordType':record_type,'answers':values[:15],
+                     'resolver':'Google Public DNS','rcode':status}))
+    return out
+
+async def internetdb(client, query, kind):
+    """Shodan InternetDB passive enrichment; never initiates port scans."""
+    ip=query.strip()
+    if not valid_public_ip(ip):
+        raise AdapterError('Only public globally routable IP addresses are accepted.')
+    url='https://internetdb.shodan.io/'+ip
+    try:
+        res=await client.get(url)
+        if res.status_code == 404:
+            return []
+        res.raise_for_status()
+        obj=res.json()
+    except httpx.HTTPStatusError as exc:
+        raise AdapterError('Shodan InternetDB returned HTTP '+str(exc.response.status_code)) from exc
+    except (httpx.TimeoutException,httpx.ConnectError,httpx.NetworkError) as exc:
+        raise AdapterError('InternetDB unavailable: '+type(exc).__name__) from exc
+    except ValueError as exc:
+        raise AdapterError('InternetDB returned invalid JSON') from exc
+    if not isinstance(obj,dict):
+        raise AdapterError('InternetDB returned an unexpected response format')
+    ports=[p for p in obj.get('ports',[]) if isinstance(p,int) and 0<p<65536][:40]
+    vulns=[str(v)[:32] for v in obj.get('vulns',[]) if isinstance(v,str)][:40]
+    names=[str(x)[:160] for x in obj.get('hostnames',[]) if isinstance(x,str)][:15]
+    tags=[str(x)[:100] for x in obj.get('tags',[]) if isinstance(x,str)][:20]
+    if not ports and not vulns and not names and not tags:
+        return []
+    # CVE indicators are provider assertions, NOT proofs of current exploitation.
+    summary=(f'Passive snapshot: {len(ports)} reported ports; {len(vulns)} CVE references; '
+             f'{len(names)} hostnames. Reported ports: {", ".join(map(str,ports[:12])) or "none"}. '
+             'Findings may be stale or inaccurate; never treat CVE presence as verified vulnerability.')
+    return [canon_record('Passive network exposure · '+ip,summary,
+            'https://www.shodan.io/host/'+ip,'shodan:'+ip,
+            {'ip':ip,'ports':ports,'vulns':vulns,'hostnames':names,'tags':tags,
+             'cpes':obj.get('cpes',[])[:35] if isinstance(obj.get('cpes'),list) else [],
+             'mode':'passive','verified':False})]
+
+CATALOG.extend([
+    Connector('dns','Google Public DNS',('domain',),
+        'Passive A, MX and NS records from a public resolver; not a security scan.',
+        'https://developers.google.com/speed/public-dns/docs/doh',
+        'Keyless official resolver API; rate limits apply'),
+    Connector('internetdb','Shodan InternetDB',('ip',),
+        'Passive IP observation metadata: ports, CVEs, hostnames and tags. Not current verification.',
+        'https://book.shodan.io/developer-apis/internetdb/',
+        'Keyless read-only enrichment; incomplete and potentially stale')
+])
+FUNCTIONS.update({'dns':dns_records,'internetdb':internetdb})
