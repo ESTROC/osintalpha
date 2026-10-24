@@ -172,16 +172,36 @@ async def openalex(client, query, subject_type):
 
 
 async def crossref(client, query, subject_type):
-    obj = await get_json(client, 'https://api.crossref.org/works', {'query.author': query, 'rows': 8, 'select': 'DOI,title,author,published,URL'})
-    items = []
-    for w in obj.get('message', {}).get('items', [])[:8]:
-        title = (w.get('title') or ['Untitled'])[0]
-        authors = ', '.join((a.get('given', '') + ' ' + a.get('family', '')).strip() for a in w.get('author', [])[:5])
-        doi = w.get('DOI', '')
-        items.append(canon_record(title, f'Publication candidate. Listed authors: {authors}. Publication alone does not verify identity or education.',
-                  f'https://doi.org/{quote(doi, safe="/")}' if doi else w.get('URL'), doi or title,
-                  {'title': title, 'doi': doi, 'authors': authors}))
-    return items
+    """Only retain papers that actually list an author matching the query's name.
+
+    Crossref query.author searches metadata broadly and can return partial-name
+    matches across DIFFERENT authors on one work. This is not identity proof.
+    """
+    obj=await get_json(client,'https://api.crossref.org/works',
+        {'query.author':query,'rows':20,'select':'DOI,title,author,published,URL'})
+    target=re.findall(r'[a-z0-9]+',query.casefold())
+    def matching_author(author):
+        name=(str(author.get('given',''))+' '+str(author.get('family',''))).strip()
+        parts=re.findall(r'[a-z0-9]+',name.casefold())
+        if not parts or not target:return False
+        if len(target)==1:return target[0] in parts
+        # Exact first/last names; tolerate middle initials, never match
+        # first and last words belonging to two different coauthors.
+        return parts[0]==target[0] and parts[-1]==target[-1] and len(parts)<=len(target)+2
+    found=[]
+    for w in obj.get('message',{}).get('items',[])[:20]:
+        authors=[a for a in w.get('author',[]) if isinstance(a,dict)]
+        if not any(matching_author(a) for a in authors):
+            continue
+        title=(w.get('title') or ['Untitled'])[0]
+        named=', '.join((a.get('given','')+' '+a.get('family','')).strip() for a in authors[:6])
+        doi=str(w.get('DOI') or '')
+        found.append(canon_record(title,'Publication author-name match. Authors: '+named+
+                '. Same-name authors may be different people. This does not confirm education or identity.',
+                'https://doi.org/'+quote(doi,safe='/') if doi else w.get('URL'),
+                doi or title,{'title':title,'doi':doi,'authors':named,'identity_verified':False}))
+        if len(found)>=10:break
+    return found
 
 
 async def gleif(client, query, subject_type):
