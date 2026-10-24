@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS research_messages (
  evidence_ids_json TEXT NOT NULL DEFAULT '[]',web_leads_json TEXT NOT NULL DEFAULT '[]',
  created_at TEXT NOT NULL, message_index INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,message_index);
+CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,created_at);
 CREATE TABLE IF NOT EXISTS search_history (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),search_query TEXT NOT NULL,
