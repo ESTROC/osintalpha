@@ -654,7 +654,7 @@ def case_triage(case_id:str,actor=Depends(actor_from_cookie)):
     ranked.sort(key=lambda r:(-r['relevance'],r['label'].casefold()))
     return {'caseId':case_id,'subject':case['query'],'clues':context,
         'hasDisambiguationClues':bool(hints),'candidates':ranked[:100],
-        'notice':'Heuristic sorting only. No account identity or source claim is automatically verified.'}
+        'notice':'Heuristic sorting only. No account identity or source claim is automatically verified; identity is not automatically verified.'}
 
 @app.get('/api/cases/{case_id}/search-history')
 def case_searches(case_id:str,actor=Depends(actor_from_cookie)):
@@ -675,11 +675,13 @@ def save_chat(case_id,actor,body,question,response,provider):
             session=uid()
             c.execute('INSERT INTO research_sessions VALUES (?,?,?,?,?,?)',
                 (session,case_id,actor['id'],question[:95],iso_now(),iso_now()))
+        position=c.execute('SELECT COALESCE(MAX(message_index),0) n FROM research_messages WHERE session_id=?',(session,)).fetchone()['n']
         for role,value in (('user',question),('assistant',response['answer'])):
-            c.execute('INSERT INTO research_messages(id,session_id,role,content,provider,evidence_ids_json,web_leads_json,created_at) VALUES (?,?,?,?,?,?,?,?)',
+            position+=1
+            c.execute('INSERT INTO research_messages(id,session_id,role,content,provider,evidence_ids_json,web_leads_json,created_at,message_index) VALUES (?,?,?,?,?,?,?,?,?)',
                 (uid(),session,role,value,provider,
                  json.dumps(response.get('evidenceIds',[]) if role=='assistant' else []),
-                 json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now()))
+                 json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now(),position))
         c.execute('UPDATE research_sessions SET updated_at=? WHERE id=?',(iso_now(),session))
         return session
 
@@ -698,7 +700,7 @@ def conversation(case_id:str,session_id:str,actor=Depends(actor_from_cookie)):
         row=c.execute('SELECT id,title,owner_id FROM research_sessions WHERE id=? AND case_id=?',(session_id,case_id)).fetchone()
         if not row or (row['owner_id']!=actor['id'] and actor['role']!='admin'):
             raise HTTPException(404,'Conversation not found.')
-        messages=c.execute('SELECT role,content,provider,evidence_ids_json,web_leads_json,created_at FROM research_messages WHERE session_id=? ORDER BY created_at,id LIMIT 300',(session_id,))
+        messages=c.execute('SELECT role,content,provider,evidence_ids_json,web_leads_json,created_at FROM research_messages WHERE session_id=? ORDER BY message_index LIMIT 300',(session_id,))
         return {'session':{'id':row['id'],'title':row['title']},'messages':[
           {'role':r['role'],'text':r['content'],'provider':r['provider'],
            'ids':json.loads(r['evidence_ids_json']),
