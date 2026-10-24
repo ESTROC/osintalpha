@@ -137,7 +137,7 @@ Main routes:
 - `GET /api/geo/cameras?provider=caltrans|tfl`
 - `GET /api/sources`, `GET /api/projects`, `GET /api/overview`, `GET /api/audit`
 
-All case and data endpoints require authentication. Non-login mutation endpoints require the custom `X-OSINT Alpha-Action: 1` header. Configure HTTPS and reverse-proxy security before exposure beyond localhost.
+All case and data endpoints require authentication. Non-login mutation endpoints require the custom `X-OSINT-Alpha-Action: 1` header. Configure HTTPS and reverse-proxy security before exposure beyond localhost.
 
 ## Limits and security requirements before a real customer pilot
 
@@ -153,3 +153,7 @@ This demo is **not a forensically certified, multi-user, enterprise-hardened sol
 - For commercial imagery, cameras, social profiles, breach indicators and credential verification, use authorized providers with explicit rights.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/UPSTREAM_MANIFEST.md](docs/UPSTREAM_MANIFEST.md).
+
+## Cloud deployment
+
+For separated Vercel frontend / Render backend deployment, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Do not deploy with personal data using ephemeral Render Free storage.

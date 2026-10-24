@@ -1,0 +1,23 @@
+# Render Blueprint: intentionally ephemeral development demo.
+# WARNING: Render Free filesystem is ephemeral; case evidence may be deleted
+# after restarts or redeployments. Do not use for live or sensitive cases.
+services:
+  - type: web
+    name: osintalpha-api
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    envVars:
+      - key: OSINTALPHA_ADMIN_PASSWORD
+        generateValue: true
+      - key: OSINTALPHA_SECURE_COOKIE
+        value: "1"
+      - key: OSINTALPHA_DB_PATH
+        value: /srv/app/instance/osintalpha.db
+      - key: XAI_API_KEY
+        sync: false
+      - key: TFL_APP_KEY
+        sync: false

@@ -19,7 +19,7 @@
   async function api(route, options={}){
     const settings={credentials:'same-origin',...options};
     if(options.body && typeof options.body!=='string')settings.body=JSON.stringify(options.body);
-    settings.headers={...(settings.body?{'Content-Type':'application/json'}:{}),...(settings.method&&settings.method!=='GET'?{'X-OSINT Alpha-Action':'1'}:{}),...(options.headers||{})};
+    settings.headers={...(settings.body?{'Content-Type':'application/json'}:{}),...(settings.method&&settings.method!=='GET'?{'X-OSINT-Alpha-Action':'1'}:{}),...(options.headers||{})};
     let r;try{r=await fetch(route,settings)}catch{throw Error('Network request failed. Check that the server is running.');}
     let d;const type=r.headers.get('content-type')||'';
     try{d=type.includes('application/json')?await r.json():await r.text();}catch{d=null}

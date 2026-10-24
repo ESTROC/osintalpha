@@ -17,7 +17,7 @@ def client(tmp_path, monkeypatch):
 def auth(client):
     r=client.post('/api/auth/login',json={'username':'admin','password':'AnIntentionallyLongTestPassword123'})
     assert r.status_code==200
-    return {'X-OSINT Alpha-Action':'1'}
+    return {'X-OSINT-Alpha-Action':'1'}
 
 @pytest.fixture
 def case(client,auth):

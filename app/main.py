@@ -61,7 +61,7 @@ def actor_from_cookie(req: Request):
 
 
 def protect(req: Request, actor=Depends(actor_from_cookie)):
-    if req.method not in ('GET', 'HEAD', 'OPTIONS') and req.headers.get('X-OSINT Alpha-Action') != '1':
+    if req.method not in ('GET', 'HEAD', 'OPTIONS') and req.headers.get('X-OSINT-Alpha-Action') != '1':
         raise HTTPException(403, 'CSRF check failed.')
     return actor
 
