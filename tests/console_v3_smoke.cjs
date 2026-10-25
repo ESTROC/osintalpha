@@ -28,7 +28,7 @@ async function click(key,value){
 }
 (async()=>{
  await sleep(120);
- assert(html.includes('Research the open world'),'home not rendered');
+ assert(html.includes('Find relevant public records'),'home not rendered');
  assert(html.includes('name="city"'),'identity clue form missing');
  assert(html.includes('Analyst accounts'),'admin navigation missing');
  assert(!html.includes('Researching forever'));
