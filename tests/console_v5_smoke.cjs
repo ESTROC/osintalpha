@@ -1,6 +1,6 @@
 /* Regression: creating a case must actually execute the initial source research. */
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-let listeners={},markup='',researchRuns=0;
+let listeners={},markup='',researchRuns=0,agentSteps=0;
 const caseId='synthetic-case';
 const root={set innerHTML(v){markup=v},get innerHTML(){return markup}};
 const document={
@@ -34,7 +34,15 @@ const api={
 const requests=[];
 const fetch=async(url,init={})=>{
  requests.push({url,method:init.method||'GET'});
- const result=url==='/api/cases'&&init.method==='POST'?{id:caseId}:api[url]||{};
+ let result=url==='/api/cases'&&init.method==='POST'?{id:caseId}:api[url]||{};
+ if(url==='/api/cases/'+caseId+'/jobs'&&init.method==='POST')result={id:'job-test',status:'ready'};
+ if(url==='/api/cases/'+caseId+'/jobs'&&init.method!=='POST')result={items:[{id:'job-test',objective:'Find relevant public engineering work and isolate namesakes',status:agentSteps>=2?'completed':'ready',mode:'guided',completed_steps:agentSteps,max_steps:2,updated_at:'2026-10-25'}]};
+ if(url==='/api/cases/'+caseId+'/jobs/job-test'&&init.method==='GET')result={id:'job-test',objective:'Find relevant public engineering work and isolate namesakes',status:agentSteps>=2?'completed':'ready',mode:'guided',completedSteps:agentSteps,maxSteps:2,steps:[]};
+ if(url==='/api/cases/'+caseId+'/jobs/job-test/step'&&init.method==='POST'){
+  agentSteps++;
+  result={id:'job-test',objective:'Find relevant public engineering work and isolate namesakes',status:agentSteps>=2?'completed':'ready',mode:'guided',completedSteps:agentSteps,maxSteps:2,steps:[]};
+ }
+ if(url==='/api/cases/'+caseId+'/excerpts')result={items:[]};
  if(url==='/api/cases/'+caseId+'/research'&&init.method==='POST')researchRuns++;
  return {ok:true,status:200,headers:{get(){return 'application/json'}},json:async()=>result}
 };
@@ -54,5 +62,13 @@ const form={
  assert.strictEqual(researchRuns,1,'New case creation skipped its first source research run');
  assert(markup.includes('Transparent research plan'),'Case overview did not render');
  assert(requests.some(x=>x.url==='/api/research/providers'),'Web integration configuration not fetched');
- console.log('V5 new-investigation full flow: source search was executed exactly once. PASS');
+ await listeners.click({target:{closest(){return {dataset:{tab:'investigate'},hasAttribute(){return false}}}}});
+ assert(markup.includes('New investigation run'),'agent planner form missing');
+ const jobForm={id:'job-form',dataset:{},fields:{
+   objective:'Find relevant public engineering work and isolate namesakes',
+   mode:'guided',max_steps:'2',consent:'on'},querySelector(){return null}};
+ await listeners.submit({target:jobForm,preventDefault(){}});
+ assert.strictEqual(agentSteps,2,'Guided investigation did not execute its two saved source steps');
+ assert(markup.includes('Current investigation'),'Completed source workflow not visible');
+ console.log('V7 UI smoke: first search, investigation planner, two source steps PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

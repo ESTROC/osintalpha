@@ -160,6 +160,54 @@ CREATE TABLE IF NOT EXISTS review_decisions(
 );
 CREATE INDEX IF NOT EXISTS review_decisions_case ON review_decisions(case_id,created_at);
 
+
+CREATE TABLE IF NOT EXISTS research_jobs(
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ owner_id TEXT NOT NULL REFERENCES users(id),
+ objective TEXT NOT NULL,
+ mode TEXT NOT NULL,
+ allow_web INTEGER NOT NULL DEFAULT 0,
+ status TEXT NOT NULL DEFAULT 'ready',
+ max_steps INTEGER NOT NULL,
+ completed_steps INTEGER NOT NULL DEFAULT 0,
+ last_error TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_jobs_case ON research_jobs(case_id,created_at);
+CREATE TABLE IF NOT EXISTS research_job_steps(
+ id TEXT PRIMARY KEY,
+ job_id TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ step_number INTEGER NOT NULL,
+ provider TEXT NOT NULL,
+ query_text TEXT NOT NULL,
+ rationale TEXT NOT NULL,
+ status TEXT NOT NULL,
+ returned_count INTEGER NOT NULL DEFAULT 0,
+ new_count INTEGER NOT NULL DEFAULT 0,
+ changed_count INTEGER NOT NULL DEFAULT 0,
+ error_message TEXT NOT NULL DEFAULT '',
+ started_at TEXT NOT NULL,
+ finished_at TEXT NOT NULL DEFAULT '',
+ UNIQUE(job_id,step_number)
+);
+CREATE INDEX IF NOT EXISTS research_job_steps_job ON research_job_steps(job_id,step_number);
+CREATE TABLE IF NOT EXISTS verified_excerpts(
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT NOT NULL REFERENCES source_captures(id) ON DELETE CASCADE,
+ quote_text TEXT NOT NULL,
+ interpretation TEXT NOT NULL,
+ content_sha256 TEXT NOT NULL,
+ review_status TEXT NOT NULL DEFAULT 'excerpt_matched',
+ created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS verified_excerpts_case ON verified_excerpts(case_id,created_at);
+
 CREATE TABLE IF NOT EXISTS case_assessments(
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',

@@ -237,12 +237,18 @@ def intelligence(case_id:str,actor=Depends(core.actor_from_cookie)):
         reviews=[dict(r) for r in c.execute('''SELECT e.label,d.old_status,d.new_status,d.rationale,d.created_at
             FROM review_decisions d LEFT JOIN evidence e ON e.id=d.evidence_id
             WHERE d.case_id=? ORDER BY d.created_at DESC LIMIT 100''',(case_id,))]
+        excerpts=[dict(r) for r in c.execute('''SELECT x.quote_text,x.interpretation,x.content_sha256,
+            x.created_at,e.label,e.source_url,e.status evidence_status
+            FROM verified_excerpts x JOIN evidence e ON e.id=x.evidence_id
+            WHERE x.case_id=? ORDER BY x.created_at DESC LIMIT 120''',(case_id,))]
+        jobs=[dict(r) for r in c.execute('''SELECT objective,mode,status,completed_steps,max_steps,updated_at
+            FROM research_jobs WHERE case_id=? ORDER BY updated_at DESC LIMIT 30''',(case_id,))]
     assessment_data=assessment(case_id,actor)
     candidates_data=candidates(case_id,actor)
     context=get_context(case_id)
     return {'case':case,'context':context,'assessment':assessment_data,
       'evidence':ev,'claims':claims,'candidates':candidates_data['items'],
-      'researchQueries':history,'sourceCaptures':snapshots,'reviewHistory':reviews,
+      'researchQueries':history,'sourceCaptures':snapshots,'reviewHistory':reviews,'excerpts':excerpts,'jobs':jobs,
       'metrics':{'records':len(ev),'reviewed':sum(e['status']!='candidate' for e in ev),
                  'corroborated':sum(e['status']=='corroborated' for e in ev),
                  'excludedCandidates':sum(p['classification']=='excluded' for p in candidates_data['items']),
@@ -297,6 +303,17 @@ def render_report(info):
     for d in info.get('reviewHistory',[])[:100]:
         sections.append('<tr><td>'+esc(d['label'])+'</td><td>'+esc(d['old_status'])+' → '+
             esc(d['new_status'])+'</td><td>'+esc(d['rationale'])+'</td><td>'+esc(d['created_at'])+'</td></tr>')
+    sections.append('</table><h2>Matched source quotations ('+str(len(info.get('excerpts',[])))+')</h2>')
+    sections.append('<p class="warning">A matched quote proves text appears in a capture, not the truth of its interpretation or identity attribution.</p>')
+    for x in info.get('excerpts',[])[:100]:
+        sections.append('<h3>'+esc(x['label'])+'</h3><blockquote>'+esc(x['quote_text'])+
+            '</blockquote><p>'+esc(x['interpretation'])+'</p><p class="meta">Source: <a href="'+
+            esc(core.safe_href(x['source_url']))+'">'+esc(x['source_url'])+'</a>; SHA-256: '+
+            esc(x['content_sha256'])+'</p>')
+    sections.append('<h2>Guided investigation runs ('+str(len(info.get('jobs',[])))+')</h2>')
+    for job in info.get('jobs',[])[:20]:
+        sections.append('<p>'+esc(job['objective'])+' — '+esc(job['mode'])+
+            ' / '+esc(job['status'])+' / '+str(job['completed_steps'])+' source steps</p>')
     sections.append('</table><h2>Collected records ('+str(metrics['records'])+')</h2>')
     sections.append('<table><tr><th>Source</th><th>Record</th><th>Status</th><th>Analyst notes</th></tr>')
     for e in info['evidence'][:250]:

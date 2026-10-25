@@ -56,6 +56,9 @@ async function click(dataset,value){
  assert(markup.includes('Transparent research plan'),'research plan not displayed');
  assert(markup.includes('Sample Labs'),'identity context missing');
  assert(markup.includes('data-deletecase'),'case deletion control missing');
+ await click('tab','investigate');
+ assert(markup.includes('New investigation run'),'guided research mission not visible');
+ assert(markup.includes('Saved research runs'),'research progress list not visible');
  await click('tab','candidates');
  assert(markup.includes('Create an identity hypothesis'),'candidate workflow not rendered');
  assert(markup.includes('Sample Person · Delhi'),'saved hypothesis hidden');
