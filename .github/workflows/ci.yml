@@ -24,4 +24,5 @@ jobs:
       - run: node --check static/console.js
       - run: node tests/console_v3_smoke.cjs
       - run: node tests/console_v4_smoke.cjs
+      - run: node tests/console_v5_smoke.cjs
       - run: node --check static/app.js

@@ -122,6 +122,25 @@ CREATE TABLE IF NOT EXISTS candidate_evidence(
  rationale TEXT NOT NULL DEFAULT '',
  PRIMARY KEY(profile_id,evidence_id)
 );
+
+CREATE TABLE IF NOT EXISTS source_captures(
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ source_url TEXT NOT NULL,content_type TEXT NOT NULL,
+ extracted_text TEXT NOT NULL,content_sha256 TEXT NOT NULL,
+ fetched_at TEXT NOT NULL,fetch_status TEXT NOT NULL,
+ error_message TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS source_captures_evidence ON source_captures(evidence_id,fetched_at);
+CREATE TABLE IF NOT EXISTS review_decisions(
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT REFERENCES evidence(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id),
+ old_status TEXT NOT NULL,new_status TEXT NOT NULL,
+ rationale TEXT NOT NULL,created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS review_decisions_case ON review_decisions(case_id,created_at);
+
 CREATE TABLE IF NOT EXISTS case_assessments(
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',

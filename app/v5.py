@@ -1,0 +1,210 @@
+"""V5 external search and reviewable source-text capture.
+
+Search results are attributed *candidates*, not verified facts. Page capture is
+limited to predefined public hosts: arbitrary analyst URLs are never fetched.
+"""
+from __future__ import annotations
+import hashlib
+import html
+import ipaddress
+import json
+import os
+import re
+from html.parser import HTMLParser
+from urllib.parse import urlsplit
+import httpx
+from fastapi import APIRouter,Depends,HTTPException
+from pydantic import BaseModel,Field
+from . import main as core
+from . import db
+
+router=APIRouter()
+TRUSTED_EXACT={'github.com','www.github.com','stackoverflow.com','www.stackoverflow.com',
+'doi.org','www.doi.org','openalex.org','www.openalex.org','www.wikidata.org',
+'www.gleif.org','www.crossref.org','crossref.org','en.wikipedia.org'}
+TRUSTED_SUFFIX=('.wikipedia.org','.wikidata.org')
+MAX_DOWNLOAD=180_000
+MAX_TEXT=35_000
+
+def public_https(raw):
+    try:
+        p=urlsplit(str(raw))
+        host=(p.hostname or '').lower().rstrip('.')
+        if p.scheme!='https' or not host or p.username or p.password or p.port not in (None,443):
+            return False
+        if any(ch.isspace() for ch in raw) or len(raw)>600:return False
+        if host=='localhost' or host.endswith(('.local','.internal','.test','.invalid','.example')):return False
+        try:
+            ipaddress.ip_address(host)
+            return False
+        except ValueError:pass
+        return '.' in host
+    except (ValueError,TypeError):
+        return False
+
+def capture_allowed(raw):
+    if not public_https(raw):return False
+    host=urlsplit(raw).hostname.lower().rstrip('.')
+    return host in TRUSTED_EXACT or any(host.endswith(end) for end in TRUSTED_SUFFIX)
+
+class TextExtract(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.skip=0
+        self.bits=[]
+    def handle_starttag(self,tag,attrs):
+        if tag in ('script','style','noscript','svg','iframe','head'):
+            self.skip+=1
+    def handle_endtag(self,tag):
+        if tag in ('script','style','noscript','svg','iframe','head'):
+            self.skip=max(0,self.skip-1)
+    def handle_data(self,data):
+        if not self.skip and data.strip():
+            self.bits.append(data.strip())
+    def result(self):
+        return re.sub(r'\s+',' ',' '.join(self.bits)).strip()[:MAX_TEXT]
+
+def extract_text(content,ctype):
+    data=content.decode('utf-8',errors='replace')
+    if 'html' not in ctype:
+        return re.sub(r'\s+',' ',data).strip()[:MAX_TEXT]
+    parser=TextExtract()
+    parser.feed(data)
+    return parser.result()
+
+@router.get('/api/research/providers')
+def providers(actor=Depends(core.actor_from_cookie)):
+    return {'web':{'name':'Brave Web Search','configured':bool(os.getenv('BRAVE_SEARCH_API_KEY','').strip()),
+                   'note':'Optional third-party index. URLs and snippets are not proof of identity or contents.'},
+            'capture':{'hostLimited':True,'allowedHosts':sorted(TRUSTED_EXACT),
+                       'limitBytes':MAX_DOWNLOAD,'notice':'Source capture is text extraction, not a forensic archive.'}}
+
+class WebSearchInput(BaseModel):
+    query:str|None=Field(default=None,max_length=200)
+    depth:int=Field(default=2,ge=1,le=4)
+    consent:bool=False
+
+def make_queries(case,context,body):
+    base=(body.query or case['query']).strip()
+    if not base:raise HTTPException(422,'Enter a public-source research query')
+    extra=[context.get('organization',''),context.get('city',''),context.get('profession',''),context.get('public_handle','')]
+    queries=[base]
+    for addition in extra:
+        part=str(addition or '').strip()
+        if part and part.casefold() not in base.casefold():
+            queries.append(base+' '+part)
+    return list(dict.fromkeys(queries))[:body.depth]
+
+@router.post('/api/cases/{case_id}/web-discovery')
+async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.protect)):
+    with db.connect() as conn:
+        case=core.case_or_404(conn,case_id,actor)
+        ctx=conn.execute('SELECT city,organization,profession,public_handle FROM case_context WHERE case_id=?',
+                         (case_id,)).fetchone()
+    if not body.consent:
+        raise HTTPException(422,'Explicit consent is required before sending research queries to Brave Web Search.')
+    key=os.getenv('BRAVE_SEARCH_API_KEY','').strip()
+    if not key:raise HTTPException(409,'Broad web discovery requires BRAVE_SEARCH_API_KEY in Render private environment. API collectors remain available.')
+    context=dict(ctx) if ctx else {}
+    queries=make_queries(case,context,body)
+    runid=core.uid()
+    results=[]
+    async with httpx.AsyncClient(timeout=16,follow_redirects=False) as client:
+        for query in queries:
+            state='ok';message='';items=[]
+            try:
+                response=await client.get('https://api.search.brave.com/res/v1/web/search',
+                    params={'q':query,'count':12,'safesearch':'strict','text_decorations':'false',
+                            'result_filter':'web'},
+                    headers={'X-Subscription-Token':key,'Accept':'application/json'})
+                response.raise_for_status()
+                payload=response.json()
+                for x in payload.get('web',{}).get('results',[])[:12]:
+                    url=str(x.get('url',''))
+                    if not public_https(url):continue
+                    items.append({'title':str(x.get('title') or url)[:200],
+                                  'description':str(x.get('description') or '')[:900],
+                                  'url':url})
+            except (httpx.HTTPError,ValueError,TypeError) as exc:
+                state='error';message='Web source unavailable or provider request failed: '+type(exc).__name__
+            if not items and state=='ok':state='empty'
+            results.append((query,state,message,items))
+    new=0
+    with db.connect() as conn:
+        for query,status,message,items in results:
+            inserted=0
+            for item in items:
+                raw={'query':query,'provider':'Brave Web Search','title':item['title'],
+                     'snippet':item['description'],'url':item['url'],
+                     'identity_verified':False,'page_fetched':False}
+                payload=json.dumps(raw,ensure_ascii=False,sort_keys=True)
+                digest=hashlib.sha256(payload.encode()).hexdigest()
+                cur=conn.execute('''INSERT OR IGNORE INTO evidence
+                  (id,case_id,provider,label,summary,source_url,source_ref,fetched_at,observed_at,sha256,raw_json)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                  (core.uid(),case_id,'brave_web',item['title'],
+                   'Public web-search snippet (page not yet captured): '+item['description'],
+                   item['url'],item['url'][:300],core.iso_now(),None,digest,payload))
+                inserted+=cur.rowcount
+            conn.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                (core.uid(),case_id,actor['id'],runid,'brave_web',query,status,
+                 len(items),inserted,message or 'Results are unverified web leads',core.iso_now()))
+            conn.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
+                (core.uid(),case_id,'brave_web',status,inserted,message or query[:100],core.iso_now()))
+            new+=inserted
+        conn.execute('UPDATE cases SET last_collected=? WHERE id=?',(core.iso_now(),case_id))
+    core.write_audit(actor['id'],'web_discovery','case',case_id,f'{len(queries)} queries, {new} saved')
+    return {'queries':[{'query':q,'status':s,'returned':len(items),'newlySaved':'See run history'} for q,s,m,items in results],
+            'returned':sum(len(items) for q,s,m,items in results),'new':new,
+            'errors':sum(s=='error' for q,s,m,items in results),
+            'notice':'Web results are unverified candidate pages. Manually inspect original sources; do not infer identity.'}
+
+@router.post('/api/cases/{case_id}/evidence/{evidence_id}/capture')
+async def capture_source(case_id:str,evidence_id:str,actor=Depends(core.protect)):
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        record=conn.execute('SELECT id,source_url FROM evidence WHERE id=? AND case_id=?',
+            (evidence_id,case_id)).fetchone()
+    if not record:raise HTTPException(404,'Evidence source not found in this investigation')
+    raw=record['source_url']
+    if not capture_allowed(raw):
+        raise HTTPException(422,'Automatic retrieval is restricted to a small approved public-host allowlist. Open this source manually instead.')
+    try:
+        async with httpx.AsyncClient(timeout=13,follow_redirects=False,trust_env=False) as client:
+            async with client.stream('GET',raw,headers={'Accept':'text/html,text/plain,application/json',
+                     'User-Agent':'OSINTAlpha/5.0-public-evidence-capture'}) as response:
+                response.raise_for_status()
+                if response.status_code!=200:raise ValueError('Redirected or unavailable page')
+                content_type=response.headers.get('content-type','').lower().split(';')[0].strip()
+                if content_type not in ('text/html','text/plain','application/json'):
+                    raise ValueError('Only public HTML, text and JSON source captures are supported')
+                chunks=[]
+                count=0
+                async for chunk in response.aiter_bytes():
+                    count+=len(chunk)
+                    if count>MAX_DOWNLOAD:raise ValueError('Source exceeded safe text download limit')
+                    chunks.append(chunk)
+    except (httpx.HTTPError,ValueError) as exc:
+        raise HTTPException(502,'Could not securely capture this public source: '+type(exc).__name__) from exc
+    text=extract_text(b''.join(chunks),content_type)
+    if len(text)<30:raise HTTPException(422,'The public page did not contain enough visible text to capture reliably.')
+    sha=hashlib.sha256(text.encode('utf-8')).hexdigest()
+    item_id=core.uid()
+    with db.connect() as conn:
+        conn.execute('INSERT INTO source_captures VALUES (?,?,?,?,?,?,?,?,?,?)',
+            (item_id,case_id,evidence_id,raw,content_type,text,sha,core.iso_now(),'captured',''))
+    core.write_audit(actor['id'],'source_capture','evidence',evidence_id,sha[:24])
+    return {'id':item_id,'sha256':sha,'length':len(text),'status':'captured',
+      'warning':'Extracted text only. Page identity, factual claims and source authenticity are not independently verified.'}
+
+@router.get('/api/cases/{case_id}/evidence/{evidence_id}/captures')
+def list_captures(case_id:str,evidence_id:str,actor=Depends(core.actor_from_cookie)):
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        record=conn.execute('SELECT id FROM evidence WHERE id=? AND case_id=?',(evidence_id,case_id)).fetchone()
+        if not record:raise HTTPException(404,'Evidence record unavailable')
+        rows=conn.execute('SELECT id,source_url,content_type,content_sha256,fetched_at,fetch_status,extracted_text FROM source_captures WHERE case_id=? AND evidence_id=? ORDER BY fetched_at DESC LIMIT 12',(case_id,evidence_id))
+        return {'items':[{'id':r['id'],'url':r['source_url'],'contentType':r['content_type'],
+                 'sha256':r['content_sha256'],'fetchedAt':r['fetched_at'],'status':r['fetch_status'],
+                 'text':r['extracted_text'][:9000]} for r in rows],
+                'warning':'Captures are text extracts, not forensic proofs or identity verification.'}

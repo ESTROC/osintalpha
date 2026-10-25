@@ -95,7 +95,7 @@ def research_history(case_id:str,actor=Depends(core.actor_from_cookie)):
 class CandidateInput(BaseModel):
     display_name:str=Field(min_length=2,max_length=180)
     reason:str=Field(default='',max_length=1500)
-    classification:Literal['unresolved','potential_match','excluded','confirmed_by_analyst']='unresolved'
+    classification:Literal['unresolved','potential_match']='unresolved'
 
 class CandidateReview(BaseModel):
     reason:str=Field(default='',max_length=1500)
@@ -133,8 +133,14 @@ def new_candidate(case_id:str,body:CandidateInput,actor=Depends(core.protect)):
 @router.patch('/api/cases/{case_id}/candidates/{candidate_id}')
 def review_candidate(case_id:str,candidate_id:str,body:CandidateReview,actor=Depends(core.protect)):
     read_case(case_id,actor)
-    if body.classification in ('excluded','confirmed_by_analyst') and len(body.reason.strip())<12:
-        raise HTTPException(422,'Record a specific reason for exclusion or analyst confirmation.')
+    if body.classification in ('excluded','confirmed_by_analyst') and len(body.reason.strip())<20:
+        raise HTTPException(422,'Record a specific evidence-based rationale of at least 20 characters.')
+    if body.classification=='confirmed_by_analyst':
+        with db.connect() as check:
+            providers=check.execute('SELECT count(DISTINCT e.provider) n FROM candidate_evidence l JOIN evidence e ON e.id=l.evidence_id WHERE l.profile_id=? AND e.case_id=? AND e.status=?',
+                 (candidate_id,case_id,'corroborated')).fetchone()['n']
+        if providers<2:
+            raise HTTPException(422,'Analyst identity confirmation requires two separately sourced corroborated records. This remains an analyst classification, not official verification.')
     with db.connect() as c:
         count=c.execute('UPDATE candidate_profiles SET classification=?,reason=?,updated_at=? WHERE case_id=? AND id=?',
           (body.classification,body.reason.strip(),core.iso_now(),case_id,candidate_id)).rowcount
@@ -173,8 +179,14 @@ def assessment(case_id:str,actor=Depends(core.actor_from_cookie)):
 @router.put('/api/cases/{case_id}/assessment')
 def save_assessment(case_id:str,body:AssessmentInput,actor=Depends(core.protect)):
     read_case(case_id,actor)
-    if body.status=='completed' and (len(body.executive_summary.strip())<40 or len(body.assessment.strip())<40):
-        raise HTTPException(422,'A completed investigation needs a meaningful summary and assessment.')
+    if body.status=='completed':
+        if len(body.executive_summary.strip())<40 or len(body.assessment.strip())<40 or len(body.limitations.strip())<30:
+            raise HTTPException(422,'Completion requires substantive findings and explicit limitations.')
+        with db.connect() as check:
+            claims=check.execute('SELECT count(*) n FROM claim_links WHERE case_id=?',(case_id,)).fetchone()['n']
+            queries=check.execute('SELECT count(*) n FROM research_queries WHERE case_id=?',(case_id,)).fetchone()['n']
+        if not claims and not queries:
+            raise HTTPException(422,'Completion requires a linked source claim or a documented executed research query.')
     with db.connect() as c:
         c.execute('DELETE FROM case_assessments WHERE case_id=?',(case_id,))
         c.execute('INSERT INTO case_assessments VALUES (?,?,?,?,?,?,?,?)',
@@ -192,14 +204,19 @@ class BulkReview(BaseModel):
 @router.post('/api/cases/{case_id}/evidence/bulk-review')
 def bulk_review(case_id:str,body:BulkReview,actor=Depends(core.protect)):
     read_case(case_id,actor)
+    if body.status=='corroborated' and len(body.notes.strip())<20:
+        raise HTTPException(422,'Corroboration requires a specific analyst rationale of at least 20 characters.')
     ids=list(dict.fromkeys(body.evidence_ids))
     with db.connect() as c:
         count=c.execute('SELECT count(*) n FROM evidence WHERE case_id=? AND id IN ('+
             ','.join('?'*len(ids))+')',(case_id,*ids)).fetchone()['n']
         if count!=len(ids):raise HTTPException(422,'Some evidence IDs do not belong to this case.')
         for item in ids:
+            old=c.execute('SELECT status FROM evidence WHERE id=?',(item,)).fetchone()
             c.execute('UPDATE evidence SET status=?,reviewer_notes=?,reviewed_at=?,reviewed_by=? WHERE id=?',
               (body.status,body.notes,core.iso_now(),actor['id'],item))
+            c.execute('INSERT INTO review_decisions VALUES (?,?,?,?,?,?,?,?)',
+              (core.uid(),case_id,item,actor['id'],old['status'],body.status,body.notes.strip(),core.iso_now()))
     core.write_audit(actor['id'],'evidence_bulk_review','case',case_id,f'{len(ids)}: {body.status}')
     return {'ok':True,'updated':len(ids)}
 

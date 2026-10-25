@@ -90,6 +90,17 @@ async def github(client, query, subject_type):
     search_q=f'{" ".join(words)} in:name type:{kind}'
     obj=await get_json(client,'https://api.github.com/search/users',{'q':search_q,'per_page':12})
     accounts=[row for row in obj.get('items',[]) if isinstance(row,dict)][:12]
+    # Treat a known public username as an exact account lookup. A display-name
+    # search is not sufficient to resolve a handle, and a name match must never
+    # silently confirm profile ownership.
+    if len(words)==1 and re.fullmatch(r'[A-Za-z0-9-]{1,39}',words[0]):
+        try:
+            direct=await get_json(client,'https://api.github.com/users/'+words[0])
+            if str(direct.get('login','')).casefold()==words[0].casefold():
+                accounts=[{'login':direct['login'],'id':direct.get('id') or direct['login']}] + [
+                    x for x in accounts if str(x.get('login','')).casefold()!=words[0].casefold()]
+        except (AdapterError,httpx.HTTPError,ValueError):
+            pass
     if not accounts:
         # Username-only fallback if a public account doesn't expose a real name.
         compact=''.join(words)

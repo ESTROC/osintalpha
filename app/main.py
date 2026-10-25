@@ -33,7 +33,7 @@ async def lifespan(_app):
     db.init_db()
     yield
 
-app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='4.0.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
+app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='5.0.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
 AUTH_TRIES = {}
 SESSION_LENGTH = 60 * 60 * 8
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '4.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '5.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -265,12 +265,17 @@ class ReviewInput(BaseModel):
 
 @app.patch('/api/evidence/{evidence_id}')
 def review_evidence(evidence_id:str,body:ReviewInput,actor=Depends(protect)):
+    if body.status=='corroborated' and len(body.reviewer_notes.strip())<20:
+        raise HTTPException(422,'Corroboration requires a specific rationale of at least 20 characters; identity remains unverified.')
     with db.connect() as c:
         row=c.execute('SELECT * FROM evidence WHERE id=?',(evidence_id,)).fetchone()
         if not row: raise HTTPException(404,'Evidence not found.')
         case_or_404(c,row['case_id'],actor)
         c.execute('''UPDATE evidence SET status=?,reviewer_notes=?,reviewed_at=?,reviewed_by=? WHERE id=?''',
                   (body.status,body.reviewer_notes,iso_now(),actor['id'],evidence_id))
+        c.execute('INSERT INTO review_decisions VALUES (?,?,?,?,?,?,?,?)',
+                  (uid(),row['case_id'],evidence_id,actor['id'],row['status'],body.status,
+                   body.reviewer_notes.strip(),iso_now()))
     write_audit(actor['id'],'review','evidence',evidence_id,body.status)
     return {'ok':True}
 
@@ -783,3 +788,7 @@ async def security_headers(req:Request,call_next):
 # Analyst workflows are imported after core auth, database and report helpers exist.
 from .v4 import router as analyst_workflow_router
 app.include_router(analyst_workflow_router)
+
+
+from .v5 import router as public_discovery_router
+app.include_router(public_discovery_router)
