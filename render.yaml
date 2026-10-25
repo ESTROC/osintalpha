@@ -1,6 +1,7 @@
-# Render Blueprint: intentionally ephemeral development demo.
-# WARNING: Render Free filesystem is ephemeral; case evidence may be deleted
-# after restarts or redeployments. Do not use for live or sensitive cases.
+# Render Blueprint for evaluation. PostgreSQL is the case store (DATABASE_URL).
+# Free PostgreSQL expires after its trial period and has no production-grade
+# durability guarantee. Upgrade storage and configure verified backups before
+# storing real investigations. The fallback SQLite path is development-only.
 services:
   - type: web
     name: osintalpha-api

@@ -1,21 +1,39 @@
-# OSINT Alpha — Investigation Workspace V2
+# OSINT Alpha V4 — Analyst Research Workbench
 
-**An evidence-led public-source research workbench.** Start with a person, organization, domain or public IP, run bounded passive public-source collectors, inspect the original record, review uncertainty and export source-linked results.
+An **evidence-first public-source research workspace**, not a universal intelligence engine. The product supports source planning, bounded collection, candidate identity grouping, analyst classifications, saved research conversations and source-backed reports.
 
-This repository is a **functional research prototype, not a complete enterprise OSINT suite or unrestricted intelligence system**.
+**Live frontend:** https://osintalpha-frontend.vercel.app  
+**API:** https://osintalpha-api.onrender.com  
+**Latest release notes:** [V4 Analyst Workbench](docs/WORKSPACE_V4.md)
 
-## Live instances
-Frontend: https://osintalpha-frontend.vercel.app
-Backend: https://osintalpha-api.onrender.com
+## Core workflow
 
-## What changed
-- New task-first responsive analyst interface in `static/console.js` and `static/console.css`.
-- Source-integrated people and company investigations preserved.
-- Passive public domain DNS and IP Shodan InternetDB enrichment added.
-- New `/api/capabilities` and source-linked `/api/cases/{id}/brief`.
-- Clear candidate/review workflow, better AI evidence formatting, official geospatial feeds and source-vs-reference status.
+1. Start an authorized investigation with a subject, purpose and optional public identifying clues.
+2. Preview the source-query plan (quick / standard / thorough).
+3. Execute allowlisted public API searches, inspect both returned and newly saved results.
+4. Filter source records, reject unrelated namesakes and group possible identity profiles explicitly.
+5. Attach source-linked claims, document uncertainty and write an analyst conclusion.
+6. Export the source-attributed assessment to PDF or HTML. Reopen the research later, including its saved chat history.
 
-See [docs/WORKSPACE_V2.md](docs/WORKSPACE_V2.md) for exact scope, quick start, deployment requirements and caveats.
+**Scope:** public candidate records only; no universal browsing/index, private surveillance, verified person identification or enterprise certification. Remote AI requires an API key and explicit case consent; model-proposed URLs still require independent checking.
+
+## Storage and operations
+
+The Render deployment uses PostgreSQL, but the free database is **time-limited**. Migrate to an adequately backed-up paid plan before retaining valuable information. Previous SQLite evidence was not automatically migrated.
+
+## Tests
+
+\`\`\`bash
+python -m compileall -q app run.py
+pytest -q
+node --check static/console.js
+node tests/console_v3_smoke.cjs
+node tests/console_v4_smoke.cjs
+\`\`\`
+
+These are mock-backed tests and UI simulations. They do not measure identity resolution, broad public-web recall or production threat intelligence accuracy.
+
+---
 
 ## Local quick start
 ```bash

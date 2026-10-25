@@ -124,6 +124,9 @@ def test_assessment_with_claims_and_report(client,auth,case):
     assert 'Several records share' in report.text
     assert 'A developer profile with this display name' in report.text
     assert 'No independent account ownership verification' in report.text
+    pdf=client.get('/api/cases/'+case+'/report-v4.pdf')
+    assert pdf.status_code==200,pdf.text[:200] if pdf.status_code!=200 else ''
+    assert pdf.content.startswith(b'%PDF')
 
 def test_completion_requires_substantive_assessment(client,auth,case):
     bad=client.put('/api/cases/'+case+'/assessment',headers=auth,json={
