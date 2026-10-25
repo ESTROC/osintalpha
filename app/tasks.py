@@ -1,6 +1,6 @@
 """Case-scoped research tasks: assignments, deadlines, priority, audit and review."""
 from __future__ import annotations
-from datetime import date
+from datetime import date,datetime,timezone
 from typing import Literal
 from fastapi import APIRouter,Depends,HTTPException,Query
 from pydantic import BaseModel,Field
@@ -82,7 +82,7 @@ def change_task(case_id:str,task_id:str,body:TaskChange,actor=Depends(core.prote
                   (body.status,core.iso_now(),task_id))
         c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?,?)',
                   (core.uid(),task_id,case_id,actor['id'],record['status'],
-                   body.status,body.note.strip(),core.iso_now()))
+                   body.status,body.note.strip(),datetime.now(timezone.utc).isoformat(timespec='microseconds')))
     core.write_audit(actor['id'],'task_status','task',task_id,body.status)
     return {'ok':True,'status':body.status}
 
