@@ -123,6 +123,15 @@ CREATE TABLE IF NOT EXISTS candidate_evidence(
  PRIMARY KEY(profile_id,evidence_id)
 );
 
+CREATE TABLE IF NOT EXISTS case_members(
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ granted_by TEXT NOT NULL REFERENCES users(id),
+ granted_at TEXT NOT NULL,
+ PRIMARY KEY(case_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS case_members_user ON case_members(user_id,case_id);
+
 CREATE TABLE IF NOT EXISTS investigation_tasks(
  id TEXT PRIMARY KEY,
  case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,

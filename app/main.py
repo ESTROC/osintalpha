@@ -33,7 +33,7 @@ async def lifespan(_app):
     db.init_db()
     yield
 
-app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.3.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
+app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.4.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
 AUTH_TRIES = {}
 SESSION_LENGTH = 60 * 60 * 8
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '7.3.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '7.4.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -171,8 +171,8 @@ def cases(
         raise HTTPException(422,'Start date must not follow end date.')
     if owner and actor['role']!='admin':
         raise HTTPException(403,'Only administrators can search by case owner.')
-    conditions=["(?='admin' OR c.created_by=?)"]
-    args=[actor['role'],actor['id']]
+    conditions=["(?='admin' OR c.created_by=? OR EXISTS (SELECT 1 FROM case_members m WHERE m.case_id=c.id AND m.user_id=?))"]
+    args=[actor['role'],actor['id'],actor['id']]
     search=q.strip().casefold()
     if search:
         # Escape SQL wildcard characters so a literal '%' does not match all cases.
@@ -247,7 +247,9 @@ def case_or_404(c,case_id,actor=None):
     if not row:raise HTTPException(404,'Investigation not found.')
     data=dict(row)
     if actor and actor['role']!='admin' and data['created_by']!=actor['id']:
-        raise HTTPException(404,'Investigation not found.')
+        member=c.execute('SELECT user_id FROM case_members WHERE case_id=? AND user_id=?',
+                         (case_id,actor['id'])).fetchone()
+        if not member:raise HTTPException(404,'Investigation not found.')
     return data
 
 
@@ -267,7 +269,9 @@ def get_case(case_id:str, actor=Depends(actor_from_cookie)):
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
-        case_or_404(c,case_id,actor)
+        case=case_or_404(c,case_id,actor)
+        if actor['role']!='admin' and case['created_by']!=actor['id']:
+            raise HTTPException(403,'Only the case owner or administrator can delete a case.')
         c.execute('DELETE FROM cases WHERE id=?',(case_id,))
     write_audit(actor['id'],'delete','case',case_id,'Deleted case and associated evidence')
     return {'ok':True}
@@ -908,3 +912,8 @@ app.include_router(grounded_assessment_router)
 # Case-scoped analyst research tasks.
 from .tasks import router as investigation_task_router
 app.include_router(investigation_task_router)
+
+
+# Explicit case editor access with owner-only membership administration.
+from .members import router as case_members_router
+app.include_router(case_members_router)

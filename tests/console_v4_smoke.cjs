@@ -59,6 +59,8 @@ async function click(dataset,value){
  await click('tab','investigate');
  assert(markup.includes('New investigation run'),'guided research mission not visible');
  assert(markup.includes('Saved research runs'),'research progress list not visible');
+ await click('tab','team');
+ assert(markup.includes('Authorized case collaboration'),'case-team screen missing');
  await click('tab','tasks');
  assert(markup.includes('Research assignments and review'),'task workspace not displayed');
  assert(markup.includes('task-form'),'task creation form unavailable');

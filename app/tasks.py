@@ -32,7 +32,9 @@ def assignee(conn,id,case,actor):
     row=conn.execute('SELECT id FROM users WHERE id=? AND active=1',(id,)).fetchone()
     if not row:raise HTTPException(422,'Choose an existing active analyst.')
     if id!=case['created_by'] and not (actor['role']=='admin' and id==actor['id']):
-        raise HTTPException(422,'Only the case owner or the administrator managing this case may be assigned. Cross-user sharing is not enabled.')
+        if not conn.execute('SELECT user_id FROM case_members WHERE case_id=? AND user_id=?',
+                            (case['id'],id)).fetchone():
+            raise HTTPException(422,'Task assignee must be the case owner, administrator or an authorized case editor.')
     return id
 
 @router.get('/api/cases/{case_id}/tasks')
@@ -104,6 +106,8 @@ def task_assignees(case_id:str,actor=Depends(core.actor_from_cookie)):
         case=core.case_or_404(c,case_id,actor)
         identifiers=[case['created_by']]
         if actor['role']=='admin':identifiers.append(actor['id'])
+        identifiers.extend(row['user_id'] for row in c.execute('SELECT user_id FROM case_members WHERE case_id=?',(case_id,)))
+        identifiers=list(dict.fromkeys(identifiers))
         rows=c.execute('SELECT id,username FROM users WHERE active=1 AND id IN ('+
                        ','.join('?' for _ in identifiers)+') ORDER BY username',identifiers)
         return {'items':[dict(x) for x in rows]}
