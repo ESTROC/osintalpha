@@ -230,12 +230,18 @@ def intelligence(case_id:str,actor=Depends(core.actor_from_cookie)):
           e.source_url,e.provider,e.status FROM claim_links l JOIN evidence e ON e.id=l.evidence_id
           WHERE l.case_id=? ORDER BY l.created_at DESC LIMIT 250''',(case_id,))]
         history=[dict(r) for r in c.execute('SELECT provider,query_text,status,returned_count,new_count,message,created_at FROM research_queries WHERE case_id=? ORDER BY created_at DESC LIMIT 100',(case_id,))]
+        snapshots=[dict(r) for r in c.execute('''SELECT e.label,c.source_url,c.content_sha256,
+            c.fetched_at,c.extracted_text FROM source_captures c JOIN evidence e ON e.id=c.evidence_id
+            WHERE c.case_id=? ORDER BY c.fetched_at DESC LIMIT 50''',(case_id,))]
+        reviews=[dict(r) for r in c.execute('''SELECT e.label,d.old_status,d.new_status,d.rationale,d.created_at
+            FROM review_decisions d LEFT JOIN evidence e ON e.id=d.evidence_id
+            WHERE d.case_id=? ORDER BY d.created_at DESC LIMIT 100''',(case_id,))]
     assessment_data=assessment(case_id,actor)
     candidates_data=candidates(case_id,actor)
     context=get_context(case_id)
     return {'case':case,'context':context,'assessment':assessment_data,
       'evidence':ev,'claims':claims,'candidates':candidates_data['items'],
-      'researchQueries':history,
+      'researchQueries':history,'sourceCaptures':snapshots,'reviewHistory':reviews,
       'metrics':{'records':len(ev),'reviewed':sum(e['status']!='candidate' for e in ev),
                  'corroborated':sum(e['status']=='corroborated' for e in ev),
                  'excludedCandidates':sum(p['classification']=='excluded' for p in candidates_data['items']),
@@ -279,6 +285,17 @@ def render_report(info):
     for c in info['claims']:
         sections.append('<tr><td>'+esc(c['claim_text'])+'</td><td>'+esc(c['stance'])+'</td><td><a href="'+
           esc(core.safe_href(c['source_url']))+'">'+esc(c['label'])+'</a> · '+esc(c['status'])+'</td></tr>')
+    sections.append('</table><h2>Source-text captures ('+str(len(info.get('sourceCaptures',[])))+')</h2>')
+    sections.append('<p class="meta">Source captures preserve selected extracted text, not a forensic copy or proof that claims are true.</p>')
+    for capture in info.get('sourceCaptures',[])[:30]:
+        sections.append('<h3>'+esc(capture['label'])+'</h3><p class="meta">Retrieved '+
+            esc(capture['fetched_at'])+' · SHA-256 '+esc(capture['content_sha256'])+'</p>'+
+            '<p>'+esc(capture['extracted_text'][:550])+'</p>')
+    sections.append('<h2>Analyst review decisions ('+str(len(info.get('reviewHistory',[])))+')</h2>')
+    sections.append('<table><tr><th>Record</th><th>Change</th><th>Reason</th><th>Date</th></tr>')
+    for d in info.get('reviewHistory',[])[:100]:
+        sections.append('<tr><td>'+esc(d['label'])+'</td><td>'+esc(d['old_status'])+' → '+
+            esc(d['new_status'])+'</td><td>'+esc(d['rationale'])+'</td><td>'+esc(d['created_at'])+'</td></tr>')
     sections.append('</table><h2>Collected records ('+str(metrics['records'])+')</h2>')
     sections.append('<table><tr><th>Source</th><th>Record</th><th>Status</th><th>Analyst notes</th></tr>')
     for e in info['evidence'][:250]:
