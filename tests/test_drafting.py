@@ -43,7 +43,7 @@ def test_local_ledger_is_source_linked_and_not_auto_saved(client,auth,case):
     assert data['quoteIds']==[qid]
     assert 'github.com/example-person' in data['draft']['assessment']
     assert 'Verbatim captured text:' in data['draft']['assessment']
-    assert 'not independently verified' in data['draft']['executive_summary']
+    assert 'not been independently verified' in data['draft']['executive_summary']
     assert client.get('/api/cases/'+case+'/assessment').json()['status']=='open'
 
 def test_rejected_and_stale_source_quote_excluded(client,auth,case):
