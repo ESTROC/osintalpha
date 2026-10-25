@@ -17,6 +17,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,Field
 from . import main as core
 from . import db
+from .lineage import save_observation
 
 router=APIRouter()
 TRUSTED_EXACT={'github.com','www.github.com','stackoverflow.com','www.stackoverflow.com',
@@ -130,32 +131,33 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             if not items and state=='ok':state='empty'
             results.append((query,state,message,items))
     new=0
+    revised=0
     with db.connect() as conn:
         for query,status,message,items in results:
             inserted=0
+            changed=0
             for item in items:
-                raw={'query':query,'provider':'Brave Web Search','title':item['title'],
+                raw={'provider':'Brave Web Search','title':item['title'],
                      'snippet':item['description'],'url':item['url'],
                      'identity_verified':False,'page_fetched':False}
-                payload=json.dumps(raw,ensure_ascii=False,sort_keys=True)
-                digest=hashlib.sha256(payload.encode()).hexdigest()
-                cur=conn.execute('''INSERT OR IGNORE INTO evidence
-                  (id,case_id,provider,label,summary,source_url,source_ref,fetched_at,observed_at,sha256,raw_json)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-                  (core.uid(),case_id,'brave_web',item['title'],
-                   'Public web-search snippet (page not yet captured): '+item['description'],
-                   item['url'],item['url'][:300],core.iso_now(),None,digest,payload))
-                inserted+=cur.rowcount
+                disposition=save_observation(conn,case_id=case_id,run_id=runid,
+                    query=query,provider='brave_web',
+                    source_ref=item['url'][:300],label=item['title'],
+                    summary='Public web-search snippet (page not yet captured): '+item['description'],
+                    url=item['url'],raw=raw,actor_id=actor['id'])
+                inserted+=int(disposition=='new')
+                changed+=int(disposition=='changed')
             conn.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                 (core.uid(),case_id,actor['id'],runid,'brave_web',query,status,
                  len(items),inserted,message or 'Results are unverified web leads',core.iso_now()))
             conn.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
                 (core.uid(),case_id,'brave_web',status,inserted,message or query[:100],core.iso_now()))
             new+=inserted
+            revised+=changed
         conn.execute('UPDATE cases SET last_collected=? WHERE id=?',(core.iso_now(),case_id))
     core.write_audit(actor['id'],'web_discovery','case',case_id,f'{len(queries)} queries, {new} saved')
     return {'queries':[{'query':q,'status':s,'returned':len(items),'newlySaved':'See run history'} for q,s,m,items in results],
-            'returned':sum(len(items) for q,s,m,items in results),'new':new,
+            'returned':sum(len(items) for q,s,m,items in results),'new':new,'changed':revised,
             'errors':sum(s=='error' for q,s,m,items in results),
             'notice':'Web results are unverified candidate pages. Manually inspect original sources; do not infer identity.'}
 

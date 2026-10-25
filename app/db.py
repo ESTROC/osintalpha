@@ -123,6 +123,25 @@ CREATE TABLE IF NOT EXISTS candidate_evidence(
  PRIMARY KEY(profile_id,evidence_id)
 );
 
+CREATE TABLE IF NOT EXISTS source_observations(
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ run_id TEXT NOT NULL,
+ query_text TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ source_ref TEXT NOT NULL,
+ content_sha256 TEXT NOT NULL,
+ label TEXT NOT NULL,
+ summary TEXT NOT NULL,
+ source_url TEXT NOT NULL,
+ raw_json TEXT NOT NULL,
+ disposition TEXT NOT NULL,
+ captured_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS source_observations_case ON source_observations(case_id,captured_at);
+CREATE INDEX IF NOT EXISTS source_observations_evidence ON source_observations(evidence_id,captured_at);
+
 CREATE TABLE IF NOT EXISTS source_captures(
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

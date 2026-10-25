@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from . import db
 from . import main as core
 from .research import plan
+from .lineage import save_observation
 router=APIRouter()
 
 class ResearchInput(BaseModel):
@@ -52,6 +53,7 @@ async def research(case_id:str,body:ResearchInput,actor=Depends(core.protect)):
     with db.connect() as c:
         for step,returned in zip(steps,responses):
             count=0
+            changed=0
             received=0
             if isinstance(returned,Exception):
                 status='error';message=str(returned)[:240]
@@ -59,21 +61,19 @@ async def research(case_id:str,body:ResearchInput,actor=Depends(core.protect)):
                 status='ok' if returned else 'empty'
                 received=len(returned)
                 for record in returned[:60]:
-                    raw=json.dumps(record.raw,sort_keys=True,ensure_ascii=False,default=str)
-                    digest=hashlib.sha256(raw.encode()).hexdigest()
-                    cur=c.execute('''INSERT OR IGNORE INTO evidence
-                     (id,case_id,provider,label,summary,source_url,source_ref,fetched_at,observed_at,sha256,raw_json)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-                     (core.uid(),case_id,step.provider,record.label,record.summary,record.url,
-                      record.source_ref or digest,core.iso_now(),record.observed_at,digest,raw))
-                    count+=cur.rowcount
-                message=f'{received} public-source candidate(s); {count} new. Identity not verified.'
+                    disposition=save_observation(c,case_id=case_id,run_id=run_id,
+                        query=step.query,provider=step.provider,source_ref=record.source_ref,
+                        label=record.label,summary=record.summary,url=record.url,
+                        raw=record.raw,actor_id=actor['id'],observed_at=record.observed_at)
+                    count+=int(disposition=='new')
+                    changed+=int(disposition=='changed')
+                message=f'{received} public-source candidate(s); {count} new, {changed} revised. Identity not verified.'
             c.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
               (core.uid(),case_id,actor['id'],run_id,step.provider,step.query,status,received,count,message,core.iso_now()))
             c.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
               (core.uid(),case_id,step.provider,status,count,message+' Query: '+step.query[:70],core.iso_now()))
             result.append({'provider':step.provider,'query':step.query,'reason':step.reason,
-                           'status':status,'returned':received,'new':count,'message':message})
+                           'status':status,'returned':received,'new':count,'changed':changed,'message':message})
         c.execute('UPDATE cases SET last_collected=? WHERE id=?',(core.iso_now(),case_id))
         c.execute('INSERT INTO search_history VALUES (?,?,?,?,?,?,?,?,?)',
           (core.uid(),case_id,actor['id'],case['query'],case['subject_type'],
@@ -82,6 +82,7 @@ async def research(case_id:str,body:ResearchInput,actor=Depends(core.protect)):
     core.write_audit(actor['id'],'research','case',case_id,f'{len(steps)} source queries')
     return {'runId':run_id,'queries':result,'attempted':len(result),
             'returned':sum(r['returned'] for r in result),'new':sum(r['new'] for r in result),
+            'changed':sum(r['changed'] for r in result),
             'errors':sum(r['status']=='error' for r in result),
             'note':'Returned is not a verified identity match; new means newly saved records.'}
 

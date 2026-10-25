@@ -33,7 +33,7 @@ async def lifespan(_app):
     db.init_db()
     yield
 
-app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='5.0.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
+app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='5.2.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
 AUTH_TRIES = {}
 SESSION_LENGTH = 60 * 60 * 8
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '5.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '5.2.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -293,27 +293,29 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
     if any(p not in allowed for p in providers): raise HTTPException(422,'Incompatible or unknown source selection.')
     async with httpx.AsyncClient(timeout=15, headers={'User-Agent':'OSINT AlphaIntelligenceWorkbench/1.0 (authorized research)'},follow_redirects=False) as client:
         responses=await asyncio.gather(*(collect_one(p,case['query'],case['subject_type'],client) for p in providers),return_exceptions=True)
+    from .lineage import save_observation
+    run_id=uid()
     result=[]
     with db.connect() as c:
         for p,items in zip(providers,responses):
-            state='ok'; msg='';count=0
+            state='ok'; msg='';count=0;changed=0
             if isinstance(items,Exception):
                 state='error'; msg=str(items)[:250]
             else:
                 for item in items:
-                    normalized=json.dumps(item.raw,sort_keys=True,ensure_ascii=False,default=str)
-                    digest=hashlib.sha256(normalized.encode()).hexdigest()
-                    ref=item.source_ref or digest
-                    cur=c.execute('''INSERT OR IGNORE INTO evidence
-                      (id,case_id,provider,label,summary,source_url,source_ref,fetched_at,observed_at,sha256,raw_json)
-                      VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-                      (uid(),case_id,p,item.label,item.summary,item.url,ref,iso_now(),item.observed_at,digest,normalized))
-                    count+=cur.rowcount
+                    outcome=save_observation(c,case_id=case_id,run_id=run_id,query=case['query'],
+                        provider=p,source_ref=item.source_ref,label=item.label,summary=item.summary,
+                        url=item.url,raw=item.raw,actor_id=actor['id'],observed_at=item.observed_at)
+                    count+=int(outcome=='new')
+                    changed+=int(outcome=='changed')
                 state='ok' if items else 'empty'
-                msg=f'{len(items)} candidate record(s) received; {count} new. No identity automatically confirmed.'
+                msg=f'{len(items)} candidate record(s) received; {count} new, {changed} changed. No identity automatically confirmed.'
             c.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
                       (uid(),case_id,p,state,count,msg,iso_now()))
-            result.append({'provider':p,'status':state,'new':count,'message':msg})
+            c.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                      (uid(),case_id,actor['id'],run_id,p,case['query'],state,
+                       len(items) if not isinstance(items,Exception) else 0,count,msg,iso_now()))
+            result.append({'provider':p,'status':state,'new':count,'changed':changed,'message':msg})
         c.execute('UPDATE cases SET last_collected=? WHERE id=?',(iso_now(),case_id))
     with db.connect() as c:
         c.execute('INSERT INTO search_history VALUES (?,?,?,?,?,?,?,?,?)',(

@@ -68,6 +68,7 @@ async function click(dataset,value){
  await click('tab','reports');
  assert(markup.includes('report-v4.pdf'),'assessment PDF link missing');
  await click('tab','activity');
+ assert(markup.includes('Source changes between research runs'),'version comparison panel missing');
  assert(markup.includes('Sample Person'),'query history missing');
  console.log('V4 analyst UI smoke: landing, research plan, candidates, evidence, findings, report, history PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
