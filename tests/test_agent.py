@@ -185,7 +185,7 @@ def test_excerpt_requires_capture_same_case(client,auth,case):
     assert result.status_code==422
 
 
-def test_groq_proposal_is_validated_before_source_execution(monkeypatch):
+def test_groq_proposal_is_validated_before_source_execution(client,monkeypatch):
     import asyncio
     from app import agent
     monkeypatch.setenv('GROQ_API_KEY','fake-never-sent-to-real-provider')
@@ -213,7 +213,7 @@ def test_groq_proposal_is_validated_before_source_execution(monkeypatch):
     assert 'Investigate' in result['rationale']
 
 
-def test_model_cannot_choose_unauthorized_provider_or_unrelated_person(monkeypatch):
+def test_model_cannot_choose_unauthorized_provider_or_unrelated_person(client,monkeypatch):
     import asyncio
     from app import agent
     monkeypatch.setenv('GROQ_API_KEY','synthetic-key')
