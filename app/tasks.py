@@ -62,7 +62,7 @@ def create_task(case_id:str,body:TaskInput,actor=Depends(core.protect)):
         c.execute('INSERT INTO investigation_tasks VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           (id,case_id,body.title.strip(),body.description.strip(),body.status,body.priority,
            who,due,actor['id'],now,now))
-        c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?)',
+        c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?,?)',
           (core.uid(),id,case_id,actor['id'],'',body.status,'Research task created.',now))
     core.write_audit(actor['id'],'task_create','case',case_id,id)
     return {'id':id,'status':body.status}
@@ -80,7 +80,7 @@ def change_task(case_id:str,task_id:str,body:TaskChange,actor=Depends(core.prote
             raise HTTPException(422,'Record the reviewed result or limitation (at least 20 characters).')
         c.execute('UPDATE investigation_tasks SET status=?,updated_at=? WHERE id=?',
                   (body.status,core.iso_now(),task_id))
-        c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?)',
+        c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?,?)',
                   (core.uid(),task_id,case_id,actor['id'],record['status'],
                    body.status,body.note.strip(),core.iso_now()))
     core.write_audit(actor['id'],'task_status','task',task_id,body.status)
