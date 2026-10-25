@@ -123,6 +123,32 @@ CREATE TABLE IF NOT EXISTS candidate_evidence(
  PRIMARY KEY(profile_id,evidence_id)
 );
 
+CREATE TABLE IF NOT EXISTS investigation_tasks(
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ title TEXT NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'todo',
+ priority TEXT NOT NULL DEFAULT 'normal',
+ assigned_to TEXT REFERENCES users(id),
+ due_date TEXT NOT NULL DEFAULT '',
+ created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS investigation_tasks_case ON investigation_tasks(case_id,status,due_date);
+CREATE TABLE IF NOT EXISTS investigation_task_events(
+ id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES investigation_tasks(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id),
+ old_status TEXT NOT NULL,
+ new_status TEXT NOT NULL,
+ details TEXT NOT NULL,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS investigation_task_events_task ON investigation_task_events(task_id,created_at);
+
 CREATE TABLE IF NOT EXISTS source_observations(
  id TEXT PRIMARY KEY,
  case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
