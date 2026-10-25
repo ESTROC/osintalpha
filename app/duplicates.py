@@ -82,7 +82,7 @@ def detect(records,limit=60):
             if a['provider']==b['provider'] or (a['id'],b['id']) in pairs:continue
             tb=meta[b['id']]['titleTokens']
             ratio=len(ta&tb)/max(1,len(ta|tb))
-            if ratio>=0.9 and len(ta&tb)>=6:
+            if ratio>=0.85 and len(ta&tb)>=6:
                 add(a,b,'Highly similar public titles; inspect sources before deciding equivalence.','similar_title')
     order={'same_doi':0,'same_url':1,'similar_title':2}
     result=sorted(pairs.values(),key=lambda x:(order[x['rule']],x['leftId'],x['rightId']))
