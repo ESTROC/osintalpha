@@ -883,3 +883,8 @@ app.include_router(analyst_workflow_router)
 
 from .v5 import router as public_discovery_router
 app.include_router(public_discovery_router)
+
+
+# Source history routes are registered after other API routers.
+from .lineage import router as source_lineage_router
+app.include_router(source_lineage_router)
