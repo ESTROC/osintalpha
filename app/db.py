@@ -101,6 +101,35 @@ CREATE TABLE IF NOT EXISTS claim_links (
  created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS claim_links_case ON claim_links(case_id);
+CREATE TABLE IF NOT EXISTS research_queries(
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id),run_id TEXT NOT NULL,
+ provider TEXT NOT NULL,query_text TEXT NOT NULL,status TEXT NOT NULL,
+ returned_count INTEGER NOT NULL DEFAULT 0,new_count INTEGER NOT NULL DEFAULT 0,
+ message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_queries_case ON research_queries(case_id,created_at);
+CREATE TABLE IF NOT EXISTS candidate_profiles(
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ display_name TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',
+ classification TEXT NOT NULL DEFAULT 'unresolved',created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS candidate_profiles_case ON candidate_profiles(case_id,updated_at);
+CREATE TABLE IF NOT EXISTS candidate_evidence(
+ profile_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ rationale TEXT NOT NULL DEFAULT '',
+ PRIMARY KEY(profile_id,evidence_id)
+);
+CREATE TABLE IF NOT EXISTS case_assessments(
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',
+ limitations TEXT NOT NULL DEFAULT '',next_actions TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'open',updated_by TEXT REFERENCES users(id),
+ updated_at TEXT NOT NULL
+);
+
 """
 def hash_password(password):
     salt=secrets.token_hex(16)
