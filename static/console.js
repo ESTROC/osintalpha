@@ -90,7 +90,7 @@ function caseAssistant(){
  )+'</div>';
  const messages=s.messages.length?s.messages.map((m,idx)=>'<div class="message '+m.role+'"><div class="bubble">'+
   (m.role==='assistant'?rich(m.text):'<p>'+h(m.text)+'</p>')+'</div>'+
-  (m.role==='assistant'?'<div class="message-foot">'+h(m.model||'Assistant')+(m.webSearch?' · Public web search':'')+(m.error?' · Request failed':' · Sources require review')+'</div>'+
+  (m.role==='assistant'?'<div class="message-foot">'+h(m.model||'Assistant')+(m.webSearch?' · Public web search':'')+(m.retrieval?' · '+m.retrieval.selected+'/'+m.retrieval.totalRecords+' relevant stored records selected':'')+(m.error?' · Request failed':' · Sources require review')+'</div>'+
    (m.followUp?'<button class="btn small subtle" data-question="'+h(m.followUp)+'" style="justify-content:flex-start;white-space:normal;text-align:left">'+h(m.followUp)+' →</button>':'')+
    '<div class="citation-row">'+citations(m.ids)+'</div>'+
    (m.webSearch?(m.webLeads?.length?'<div class="source-item" style="margin-top:11px"><strong>Public web leads · analyst review required</strong><p>These URLs are suggested by the model and have not been independently fetched, validated or matched to this person.</p>'+
@@ -340,7 +340,7 @@ if(f.id==='ask-form'){
  s.sessionId=r.sessionId||s.sessionId;
  s.conversations=(await api('/api/cases/'+s.id+'/conversations')).items;
  s.messages.push({role:'assistant',text:r.answer,model:r.model,ids:r.evidenceIds||[],
-                  followUp:r.followUp||'',needsDisambiguation:!!r.needsDisambiguation,webSearch:!!r.webSearch,webLeads:r.webLeads||[]});
+                  followUp:r.followUp||'',needsDisambiguation:!!r.needsDisambiguation,webSearch:!!r.webSearch,webLeads:r.webLeads||[],retrieval:r.retrieval||null});
  s.busy=false;render();
 }
 }catch(err){s.busy=false;toast(err.message,true);if(f.id==='login-form'){const el=document.getElementById('login-error');if(el)el.textContent=err.message}else if(f.id==='ask-form'){s.messages.push({role:'assistant',text:'The AI provider could not complete this request: '+err.message,model:'Provider error',error:true});render()}}finally{if(button)button.disabled=false}});

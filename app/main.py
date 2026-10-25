@@ -444,6 +444,18 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     records=chat_evidence(ev)
     history=chat_history(body)
     question=body.question.strip()
+    if body.session_id:
+        # Persisted conversation is the authoritative context for existing
+        # sessions, rather than relying on a potentially incomplete browser.
+        with db.connect() as thread_db:
+            thread=thread_db.execute('SELECT owner_id FROM research_sessions WHERE id=? AND case_id=?',
+                                     (body.session_id,case_id)).fetchone()
+            if not thread or (thread['owner_id']!=actor['id'] and actor['role']!='admin'):
+                raise HTTPException(404,'Research conversation not found.')
+            previous=list(thread_db.execute(
+                'SELECT role,content FROM research_messages WHERE session_id=? ORDER BY message_index DESC LIMIT 12',
+                (body.session_id,)))
+        history=[{'role':x['role'],'content':x['content'][:2000]} for x in reversed(previous)]
     if not question:
         raise HTTPException(422,'Enter a question to investigate.')
     if provider=='local':
@@ -469,15 +481,26 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         claims=[dict(x) for x in conn.execute(
            'SELECT claim_text,stance FROM claim_links WHERE case_id=? ORDER BY created_at DESC LIMIT 30',(case_id,))]
     clues=dict(ctx) if ctx else {}
-    triaged=case_triage(case_id,actor)['candidates']
-    prioritized={x['id']:x['relevance'] for x in triaged}
-    ordered=sorted(ev,key=lambda row:(-prioritized.get(row['id'],0),row['status']!='corroborated',row['provider']))
-    records=chat_evidence(ordered)
+    from .retrieval import rank_case_evidence
+    selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
+    records=chat_evidence(selected)
+    # Source text is explicitly labeled untrusted. The model may cite a source
+    # record but may not promote its contents to independently verified fact.
+    ids=[r['id'] for r in records]
+    passages=[]
+    if ids:
+        with db.connect() as conn:
+            matches=conn.execute('''SELECT evidence_id,source_url,content_sha256,extracted_text
+                FROM source_captures WHERE case_id=? AND evidence_id IN ('''+','.join('?' for _ in ids)+
+                ''') ORDER BY fetched_at DESC LIMIT 8''',(case_id,*ids))
+            passages=[{'evidenceId':x['evidence_id'],'url':x['source_url'],
+              'sha256':x['content_sha256'],'unverifiedText':x['extracted_text'][:650]} for x in matches]
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
              'knownPublicClues':clues,'candidateHypotheses':groups,
-             'analystSourceClaims':claims,
-             'evidence':records[:35],
+             'analystSourceClaims':claims,'retrievalCoverage':retrieval,
+             'untrustedCapturedSourceText':passages,
+             'evidence':records,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
@@ -529,7 +552,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records')
         response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
-        return {'model':model,'provider':provider,**response,'remote':True,
+        return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search),
                 'note':'Search output is a lead, not independent identity verification. Check original sources.'}
     except httpx.HTTPStatusError as exc:
