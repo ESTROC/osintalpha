@@ -150,7 +150,8 @@ def overview(actor=Depends(actor_from_cookie)):
 def cases(actor=Depends(actor_from_cookie)):
     with db.connect() as c:
         return {'items':[dict(r) for r in c.execute('''SELECT c.*,
-                (SELECT count(*) FROM evidence e WHERE e.case_id=c.id) evidence_count
+                (SELECT count(*) FROM evidence e WHERE e.case_id=c.id) evidence_count,
+                 (SELECT status FROM case_assessments a WHERE a.case_id=c.id) assessment_status
                 FROM cases c WHERE (? = 'admin' OR c.created_by=?) ORDER BY c.created_at DESC LIMIT 250''',(actor['role'],actor['id']))]}
 
 
