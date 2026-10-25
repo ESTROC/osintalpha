@@ -903,3 +903,8 @@ app.include_router(identity_comparison_router)
 
 from .drafting import router as grounded_assessment_router
 app.include_router(grounded_assessment_router)
+
+
+# Case-scoped analyst research tasks.
+from .tasks import router as investigation_task_router
+app.include_router(investigation_task_router)
