@@ -68,6 +68,7 @@ async function click(dataset,value){
  assert(markup.includes('evidence-search'),'filter unavailable');
  await click('tab','findings');
  assert(markup.includes('assessment-form'),'assessment editor missing');
+ assert(markup.includes('data-draft-assessment'),'grounded assessment drafting action missing');
  assert(markup.includes('Attributed research claims'),'claim workspace missing');
  await click('tab','reports');
  assert(markup.includes('report-v4.pdf'),'assessment PDF link missing');
