@@ -69,6 +69,7 @@ async function click(dataset,value){
  assert(markup.includes('Identity source comparison'),'identity comparison workflow missing');
  assert(markup.includes('Sample Person · Delhi'),'saved hypothesis hidden');
  await click('tab','evidence');
+ assert(markup.includes('Potential duplicate source records'),'source duplicate inspector not visible');
  assert(markup.includes('bulk-review-form'),'bulk evidence review missing');
  assert(markup.includes('evidence-search'),'filter unavailable');
  await click('tab','findings');
