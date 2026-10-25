@@ -61,6 +61,7 @@ async function click(dataset,value){
  assert(markup.includes('Saved research runs'),'research progress list not visible');
  await click('tab','candidates');
  assert(markup.includes('Create an identity hypothesis'),'candidate workflow not rendered');
+ assert(markup.includes('Identity source comparison'),'identity comparison workflow missing');
  assert(markup.includes('Sample Person · Delhi'),'saved hypothesis hidden');
  await click('tab','evidence');
  assert(markup.includes('bulk-review-form'),'bulk evidence review missing');

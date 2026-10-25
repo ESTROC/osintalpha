@@ -9,7 +9,7 @@ def test_v3_database_tables(client,auth):
                       'research_sessions','research_messages','search_history','claim_links']:
             assert c.execute("SELECT count(*) n FROM "+table).fetchone()['n']>=0
     r=client.get('/api/health')
-    assert r.json()['version']=='7.0.0'
+    assert r.json()['version']=='7.1.0'
 
 def test_case_context_and_candidate_triage(client,auth,case):
     assert client.put('/api/cases/'+case+'/context',headers=auth,json={

@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v2 research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,excerpts:[],caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,excerpts:[],identity:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'e.g. Jane Researcher',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'e.g. Example Systems Ltd',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'e.g. example.org',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'e.g. 8.8.8.8',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -91,8 +91,31 @@ function caseInvestigate(){
 
 function caseCandidates(){
  const items=s.candidates||[],ev=s.case.evidence||[];
+ const identity=s.identity||{},records=identity.records||[],proposals=identity.pairSuggestions||[],
+    compared=identity.comparison||null;
+ const selectSource=(name,selected)=>'<select name="'+name+'" required aria-label="Source record '+name+'">'+records.map(x=>'<option value="'+h(x.recordId)+'" '+(selected===x.recordId?'selected':'')+'>'+h(x.provider+' · '+x.label.slice(0,95))+'</option>').join('')+'</select>';
+ const comparison=compared?'<div class="panel-pad"><div class="badge-row">'+tag(compared.signalLevel)+'</div><p class="help">'+h(compared.limitation)+'</p>'+
+ '<div class="grid2">'+[compared.left,compared.right].map(x=>'<div class="sourcehealth" style="display:block;padding:14px"><strong>'+h(x.provider)+' · '+h(x.label)+'</strong>'+
+ ['name','organization','location','publicHandle','website'].map(k=>'<p class="meta">'+h(k)+': '+h(x[k]||'Not published')+'</p>').join('')+
+ link(x.url,'Original public record')+'</div>').join('')+'</div>'+
+ '<div class="divider"></div><strong>Matching published attributes</strong>'+
+ (compared.matching.length?compared.matching.map(m=>'<p class="meta">'+h(m.field)+': '+h(m.value)+'</p>').join(''):'<p class="help">No explicit matching identifiers found.</p>')+
+ '<strong>Differences requiring human interpretation</strong>'+
+ (compared.differing.length?compared.differing.map(m=>'<p class="meta">'+h(m.field)+': '+h(m.left)+' / '+h(m.right)+'</p>').join(''):'<p class="help">No explicit different attributes recorded.</p>')+'</div>':'';
+ const sourceMatrix='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div><div class="panel-title">Identity source comparison</div><div class="panel-meta">Compare public attributes side by side. A shared display name is insufficient to link accounts.</div></div><span class="tag">'+records.length+' candidate records</span></div>'+
+ (records.length>=2?'<form id="identity-compare-form" class="panel-pad input-stack"><div class="form-row">'+
+ selectSource('left',compared?.left?.recordId)+selectSource('right',compared?.right?.recordId)+
+ '</div><button class="btn small" type="submit">Compare published attributes</button></form>':
+ '<div class="empty">At least two source candidates are required. Run source research first.</div>')+comparison+
+ '<div class="panel-head"><div class="panel-title">Potential shared public identifiers</div><span class="tag">'+proposals.length+' to inspect</span></div>'+
+ (proposals.length?proposals.slice(0,18).map(p=>'<div class="item-row"><div class="row-main"><strong>'+h(p.leftLabel)+' / '+h(p.rightLabel)+'</strong><div class="item-sub">'+h(p.providers.join(' · '))+' · '+h(p.matching.map(x=>x.field).join(', '))+'</div></div><button type="button" class="btn small" data-identity-pair="'+h(p.leftId+':'+p.rightId)+'">Compare</button></div>').join(''):
+ '<div class="empty">No cross-source explicit public identifier overlap found. Do not treat name-only matches as a linked identity.</div>')+
+ '<div class="panel-head"><div class="panel-title">Known-clue relevance</div></div>'+
+ records.slice(0,18).map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.label)+'</strong><div class="item-sub">'+h(x.provider)+' · matched: '+h(x.clues.matched.join(', ')||'none')+' · differing: '+h(x.clues.different.map(d=>d.field).join(', ')||'none')+'</div></div>'+link(x.url,'Source')+'</div>').join('')+
+ '<p class="help panel-pad">'+h(identity.notice||'This does not verify ownership or identity.')+'</p></section>';
+
  return '<div class="analyst-intro"><div><div class="eyebrow">IDENTITY RESOLUTION / ANALYST CONTROL</div><h2>Compare namesakes. Do not merge blindly.</h2><p>Group only records supported by matching public identifiers. An analyst confirmation is a documented decision, not legal identity verification.</p></div></div>'+
- '<div class="grid2"><section class="panel"><div class="panel-head"><div class="panel-title">Candidate profiles ('+items.length+')</div></div>'+
+ sourceMatrix+ '<div class="grid2"><section class="panel"><div class="panel-head"><div class="panel-title">Candidate profiles ('+items.length+')</div></div>'+
  (items.length?items.map(x=>'<article class="candidate-card"><div class="badge-row">'+tag(x.classification)+'</div><h3>'+h(x.display_name)+'</h3><p class="page-sub">'+h(x.reason||'No rationale yet.')+'</p><div class="meta">'+x.sources.length+' linked public-source record(s)</div>'+
  x.sources.map(y=>'<div class="sourcehealth">'+link(y.source_url,y.label)+' <span class="tag">'+h(y.status)+'</span></div>').join('')+
  '<form data-candidate-review="'+h(x.id)+'" class="input-stack"><label class="field-label">Analyst hypothesis</label><select name="classification">'+['unresolved','potential_match','excluded','confirmed_by_analyst'].map(v=>'<option value="'+v+'" '+(x.classification===v?'selected':'')+'>'+h(v.replaceAll('_',' '))+'</option>').join('')+'</select><textarea name="reason" maxlength="1500" aria-label="Reason for analyst hypothesis" placeholder="Explain corroborating or conflicting evidence">'+h(x.reason||'')+'</textarea><button class="btn small">Save decision</button></form>'+
@@ -241,9 +264,9 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.excerpts=[];await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.excerpts=[];s.identity=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
- const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts]=await Promise.all([
+ const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity]=await Promise.all([
    api('/api/cases/'+s.id+'/triage'),
    api('/api/cases/'+s.id+'/conversations'),
    api('/api/cases/'+s.id+'/search-history'),
@@ -254,10 +277,11 @@ async function loadResearchState(){
    api('/api/research/providers'),
    api('/api/cases/'+s.id+'/changes'),
    api('/api/cases/'+s.id+'/jobs'),
-   api('/api/cases/'+s.id+'/excerpts')
+   api('/api/cases/'+s.id+'/excerpts'),
+   api('/api/cases/'+s.id+'/identity-analysis')
  ]);
  s.triage=tr;s.conversations=conv.items||[];s.searchHistory=history.items||[];
- s.researchPlan=researchPlan;s.researchRuns=runs.items||[];s.candidates=candidates.items||[];s.intel=intel;s.webProviders=webProviders;s.changes=changes;s.jobs=jobs.items||[];s.excerpts=excerpts.items||[];
+ s.researchPlan=researchPlan;s.researchRuns=runs.items||[];s.candidates=candidates.items||[];s.intel=intel;s.webProviders=webProviders;s.changes=changes;s.jobs=jobs.items||[];s.excerpts=excerpts.items||[];s.identity=identity;
  if(s.job?.id)s.job=await api('/api/cases/'+s.id+'/jobs/'+s.job.id);
  if(s.conversations.length)await loadConversation(s.conversations[0].id);
 }
@@ -285,7 +309,7 @@ async function collect(){
 async function launch(form){const d=Object.fromEntries(new FormData(form).entries());s.busy=true;render();try{const ca=await api('/api/cases',{method:'POST',body:{title:modes[s.mode].name+' · '+d.query.trim(),subject_type:s.mode,query:d.query.trim(),purpose:d.purpose.trim(),authority_confirmed:!!d.authority,ai_opt_in:!!d.ai_opt_in,city:d.city||'',organization:d.organization||'',profession:d.profession||'',public_handle:d.public_handle||''}});await refreshCases();await openCase(ca.id);s.busy=false;try{await collect()}catch(err){toast('Case created, but source lookup failed: '+err.message,true)}}finally{s.busy=false;render()}}
 async function loadGeo(){s.geoStatus='loading';s.geoError='';render();try{const out=await api(['earthquakes','nasa'].includes(s.feed)?'/api/geo/events?feed='+s.feed:'/api/geo/cameras?provider='+(s.feed==='caltrans'?'caltrans':'tfl'));s.geo=out.items||[];s.geoStatus=out.status||'ok';s.geoError=out.note||out.message||''}catch(err){s.geo=[];s.geoError=err.message;s.geoStatus='unavailable'}render()}
 async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.server=auth;const [ca,ov,so,pr,cap]=await Promise.all([api('/api/cases'),api('/api/overview'),api('/api/sources'),api('/api/projects'),api('/api/capabilities')]);s.cases=ca.items||[];s.overview=ov;s.sources=so.items||[];s.projects=pr.items||[];s.capabilities=cap;if(s.user?.role==='admin')s.users=(await api('/api/users')).items;s.where='home';render()}
-document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-logout]');if(!t)return;try{
+document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-logout]');if(!t)return;try{
 if(t.dataset.nav){s.where=t.dataset.nav;render();if(s.where==='world'&&s.geoStatus==='idle')await loadGeo()}
 else if(t.dataset.mode){s.mode=t.dataset.mode;s.where='home';render();document.getElementById('query')?.focus()}
 else if(t.dataset.tab){s.tab=t.dataset.tab;render()}
@@ -313,6 +337,13 @@ else if(t.dataset.jobSelect){
  s.tab='investigate';render();
 }
 else if(t.hasAttribute('data-job-run'))await runJobFlow()
+else if(t.dataset.identityPair){
+ const ids=t.dataset.identityPair.split(':');
+ if(ids.length===2){
+  s.identity=await api('/api/cases/'+s.id+'/identity-analysis?left='+encodeURIComponent(ids[0])+'&right='+encodeURIComponent(ids[1]));
+  s.tab='candidates';render();
+ }
+}
 else if(t.hasAttribute('data-job-recover')){
  s.job=await api('/api/cases/'+s.id+'/jobs/'+s.job.id+'/recover',{method:'POST',body:{}});
  render();toast('Interrupted research checkpoint recovered.');
@@ -385,9 +416,14 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form'].includes(f.id)||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form'].includes(f.id)||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
+if(f.id==='identity-compare-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ s.identity=await api('/api/cases/'+s.id+'/identity-analysis?left='+encodeURIComponent(d.left)+'&right='+encodeURIComponent(d.right));
+ s.tab='candidates';render();
+}
 if(f.id==='job-form'){
  const d=Object.fromEntries(new FormData(f).entries());
  const create=await api('/api/cases/'+s.id+'/jobs',{method:'POST',body:{
