@@ -454,8 +454,23 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             +('choose GroqCloud if you have GROQ_API_KEY.' if provider=='grok' else 'Check your Render environment.'))
     if not ca['ai_opt_in']:
         raise HTTPException(403,f'Remote {provider} AI is disabled for this case. Explicitly enable it in the case assistant before retrying.')
+    # Supply context entered by the analyst and the explicit hypothesis registry.
+    # Never automatically promote these clues into verified identity facts.
+    with db.connect() as conn:
+        ctx=conn.execute('SELECT city,organization,profession,public_handle FROM case_context WHERE case_id=?',(case_id,)).fetchone()
+        groups=[dict(x) for x in conn.execute(
+           'SELECT display_name,reason,classification FROM candidate_profiles WHERE case_id=? ORDER BY updated_at DESC LIMIT 20',(case_id,))]
+        claims=[dict(x) for x in conn.execute(
+           'SELECT claim_text,stance FROM claim_links WHERE case_id=? ORDER BY created_at DESC LIMIT 30',(case_id,))]
+    clues=dict(ctx) if ctx else {}
+    triaged=case_triage(case_id,actor)['candidates']
+    prioritized={x['id']:x['relevance'] for x in triaged}
+    ordered=sorted(ev,key=lambda row:(-prioritized.get(row['id'],0),row['status']!='corroborated',row['provider']))
+    records=chat_evidence(ordered)
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
+             'knownPublicClues':clues,'candidateHypotheses':groups,
+             'analystSourceClaims':claims,
              'evidence':records[:35],
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
@@ -626,35 +641,49 @@ def put_case_context(case_id:str,body:ContextUpdate,actor=Depends(protect)):
 
 @app.get('/api/cases/{case_id}/triage')
 def case_triage(case_id:str,actor=Depends(actor_from_cookie)):
+    """Explainable clue-to-attribute triage, not automatic person verification."""
     with db.connect() as c:
         case=case_or_404(c,case_id,actor)
         clues=c.execute('SELECT * FROM case_context WHERE case_id=?',(case_id,)).fetchone()
-        records=[dict(r) for r in c.execute(
+        rows=[dict(r) for r in c.execute(
             'SELECT id,label,summary,provider,status,source_url,raw_json FROM evidence WHERE case_id=? LIMIT 500',(case_id,))]
     context=dict(clues) if clues else {}
-    hints=[(k,str(context.get(k,'')).strip()) for k in ('city','organization','profession','public_handle')]
-    hints=[(k,value) for k,value in hints if value]
+    hints={k:str(context.get(k,'') or '').strip() for k in
+           ('city','organization','profession','public_handle')}
+    hints={k:v for k,v in hints.items() if v}
+    def matches(value,needle):
+        tokens=[t for t in re.findall(r'\w+',needle.casefold()) if len(t)>=2]
+        target=' '.join(re.findall(r'\w+',str(value).casefold()))
+        return bool(tokens) and all(t in target.split() for t in tokens)
     ranked=[]
-    for row in records:
-        try:raw=json.loads(row['raw_json'])
+    for record in rows:
+        try:raw=json.loads(record['raw_json'])
         except (ValueError,TypeError):raw={}
-        attrs={k:str(raw.get(k,'') or '') for k in ('location','company','bio','login','display_name')}
-        text=' '.join([row['label'],row['summary']]+list(attrs.values())).casefold()
-        matched=[];missing=[]
-        for field,value in hints:
-            terms=[x for x in re.findall(r'\w+',value.casefold()) if len(x)>=3]
-            if not terms:continue
-            if all(term in text for term in terms):matched.append(field)
-            else:missing.append(field)
-        # Ordering is only an analyst triage heuristic, not a calibrated probability.
-        relevance=len(matched)*2+(1 if row['status']=='corroborated' else 0)
-        ranked.append({'id':row['id'],'label':row['label'],'provider':row['provider'],
-            'status':row['status'],'source_url':row['source_url'],
-            'signals':matched,'unmatchedClues':missing,'relevance':relevance})
+        locations=[str(raw.get(k) or '') for k in ('location','city','region')]
+        employers=[str(raw.get(k) or '') for k in ('company','organization','institution')]
+        biography=[str(raw.get(k) or '') for k in ('bio','profession','headline','description')]
+        handle=[str(raw.get(k) or '') for k in ('login','username','handle')]
+        fields={'city':locations,'organization':employers,
+                'profession':biography,'public_handle':handle}
+        matched=[];unknown=[]
+        for field,value in hints.items():
+            options=[v for v in fields[field] if v.strip()]
+            if any(matches(candidate,value) for candidate in options):
+                matched.append(field)
+            else:
+                unknown.append(field)
+        relevance=len(matched)*3
+        ranked.append({'id':record['id'],'label':record['label'],
+          'provider':record['provider'],'status':record['status'],
+          'source_url':record['source_url'],'signals':matched,
+          'unmatchedClues':unknown,'relevance':relevance,
+          'signalExplanation':'Matched public source attributes: '+(', '.join(matched) if matched else 'none')+
+          '. Other attributes are unverified or unavailable.'})
     ranked.sort(key=lambda r:(-r['relevance'],r['label'].casefold()))
     return {'caseId':case_id,'subject':case['query'],'clues':context,
-        'hasDisambiguationClues':bool(hints),'candidates':ranked[:100],
-        'notice':'Heuristic sorting only. No account identity or source claim is automatically verified; identity is not automatically verified.'}
+       'hasDisambiguationClues':bool(hints),'candidates':ranked[:100],
+       'notice':'Fields compare explicit public source attributes only. Nonmatches are unknown, not contradictions. Identity is not automatically verified.'}
+
 
 @app.get('/api/cases/{case_id}/search-history')
 def case_searches(case_id:str,actor=Depends(actor_from_cookie)):
