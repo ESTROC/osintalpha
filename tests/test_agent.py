@@ -183,3 +183,54 @@ def test_excerpt_requires_capture_same_case(client,auth,case):
       'quote_text':'experience developing authenticated applications with Python and FastAPI',
       'interpretation':'Attempted cross-case quotation must not be allowed'})
     assert result.status_code==422
+
+
+def test_groq_proposal_is_validated_before_source_execution(monkeypatch):
+    import asyncio
+    from app import agent
+    monkeypatch.setenv('GROQ_API_KEY','fake-never-sent-to-real-provider')
+    class FakeResponse:
+        def raise_for_status(self):pass
+        def json(self):return {'choices':[{'message':{'content':json.dumps({
+            'provider':'github','query':'Test Person ESTROC',
+            'rationale':'Investigate published organizational identifiers'})}}]}
+    class FakeClient:
+        def __init__(self,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def post(self,url,headers,json):
+            assert url.startswith('https://api.groq.com/')
+            assert 'allowedProviders' in json['messages'][1]['content']
+            return FakeResponse()
+    monkeypatch.setattr(agent.httpx,'AsyncClient',FakeClient)
+    case={'id':'case-example','query':'Test Person','subject_type':'person'}
+    context={'city':'Delhi','organization':'ESTROC','public_handle':''}
+    job={'id':'job-example','objective':'Find public professional accounts',
+         'mode':'groq','allow_web':0}
+    result=asyncio.run(agent.ai_proposed_step(case,context,job,[],{'github','stackoverflow'}))
+    assert result['provider']=='github'
+    assert result['query']=='Test Person ESTROC'
+    assert 'Investigate' in result['rationale']
+
+
+def test_model_cannot_choose_unauthorized_provider_or_unrelated_person(monkeypatch):
+    import asyncio
+    from app import agent
+    monkeypatch.setenv('GROQ_API_KEY','synthetic-key')
+    answer={'provider':'arbitrary-network-scanner','query':'Test Person',
+            'rationale':'Not allowlisted'}
+    class FakeResponse:
+        def raise_for_status(self):pass
+        def json(self):return {'choices':[{'message':{'content':json.dumps(answer)}}]}
+    class FakeClient:
+        def __init__(self,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def post(self,*args,**kwargs):return FakeResponse()
+    monkeypatch.setattr(agent.httpx,'AsyncClient',FakeClient)
+    case={'id':'example','query':'Test Person','subject_type':'person'}
+    job={'id':'example','objective':'Verify public professional accounts','mode':'groq','allow_web':0}
+    assert asyncio.run(agent.ai_proposed_step(case,{},job,[],{'github'})) is None
+    answer['provider']='github'
+    answer['query']='Unrelated Person private details'
+    assert asyncio.run(agent.ai_proposed_step(case,{},job,[],{'github'})) is None
