@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, Request, Response, Depends, HTTPException, Body
+from fastapi import FastAPI, Request, Response, Depends, HTTPException, Body, Query
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -147,12 +147,78 @@ def overview(actor=Depends(actor_from_cookie)):
 
 
 @app.get('/api/cases')
-def cases(actor=Depends(actor_from_cookie)):
+def cases(
+    q: str = Query(default='',max_length=160),
+    status: Literal['all','open','researching','awaiting_review','completed']='all',
+    subject_type: Literal['all','person','organization','domain','ip']='all',
+    owner: str = Query(default='',max_length=60),
+    date_from: str = Query(default='',max_length=10),
+    date_to: str = Query(default='',max_length=10),
+    sort: Literal['newest','oldest','most_evidence','recent_activity']='newest',
+    page: int = Query(default=1,ge=1,le=1000000),
+    page_size: int = Query(default=25,ge=1,le=100),
+    actor=Depends(actor_from_cookie),
+):
+    """Query the complete authorized case registry, with stable SQL pagination."""
+    from datetime import date
+    for name,value in (('date_from',date_from),('date_to',date_to)):
+        if value:
+            try:
+                if date.fromisoformat(value).isoformat()!=value: raise ValueError(value)
+            except ValueError as exc:
+                raise HTTPException(422,f'Invalid {name}: ISO date required.') from exc
+    if date_from and date_to and date_from>date_to:
+        raise HTTPException(422,'Start date must not follow end date.')
+    if owner and actor['role']!='admin':
+        raise HTTPException(403,'Only administrators can search by case owner.')
+    conditions=["(?='admin' OR c.created_by=?)"]
+    args=[actor['role'],actor['id']]
+    search=q.strip().casefold()
+    if search:
+        # Escape SQL wildcard characters so a literal '%' does not match all cases.
+        search=search.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')
+        pattern='%'+search+'%'
+        conditions.append("""(lower(c.title) LIKE ? ESCAPE '\\'
+           OR lower(c.query) LIKE ? ESCAPE '\\'
+           OR lower(c.purpose) LIKE ? ESCAPE '\\'
+           OR lower(COALESCE(ctx.organization,'')) LIKE ? ESCAPE '\\')""")
+        args.extend([pattern]*4)
+    if status!='all':
+        conditions.append("COALESCE(a.status,'open')=?")
+        args.append(status)
+    if subject_type!='all':
+        conditions.append('c.subject_type=?')
+        args.append(subject_type)
+    if owner:
+        conditions.append('u.username=?')
+        args.append(owner)
+    if date_from:
+        conditions.append('substr(c.created_at,1,10)>=?')
+        args.append(date_from)
+    if date_to:
+        conditions.append('substr(c.created_at,1,10)<=?')
+        args.append(date_to)
+    source=('FROM cases c JOIN users u ON u.id=c.created_by '
+            'LEFT JOIN case_assessments a ON a.case_id=c.id '
+            'LEFT JOIN case_context ctx ON ctx.case_id=c.id')
+    where=' WHERE '+' AND '.join(conditions)
+    order={
+        'newest':'c.created_at DESC,c.id DESC',
+        'oldest':'c.created_at ASC,c.id ASC',
+        'most_evidence':'evidence_count DESC,c.created_at DESC,c.id DESC',
+        'recent_activity':'COALESCE(c.last_collected,c.created_at) DESC,c.id DESC',
+    }[sort]
     with db.connect() as c:
-        return {'items':[dict(r) for r in c.execute('''SELECT c.*,
-                (SELECT count(*) FROM evidence e WHERE e.case_id=c.id) evidence_count,
-                 (SELECT status FROM case_assessments a WHERE a.case_id=c.id) assessment_status
-                FROM cases c WHERE (? = 'admin' OR c.created_by=?) ORDER BY c.created_at DESC LIMIT 250''',(actor['role'],actor['id']))]}
+        total=c.execute('SELECT count(*) n '+source+where,tuple(args)).fetchone()['n']
+        rows=c.execute('''SELECT c.id,c.title,c.subject_type,c.query,c.purpose,c.created_at,
+             c.last_collected,c.created_by,u.username owner_username,
+             COALESCE(a.status,'open') assessment_status,
+             (SELECT count(*) FROM evidence e WHERE e.case_id=c.id) evidence_count
+             '''+source+where+' ORDER BY '+order+' LIMIT ? OFFSET ?',
+             tuple(args+[page_size,(page-1)*page_size]))
+        items=[dict(row) for row in rows]
+    return {'items':items,'total':total,'page':page,'pageSize':page_size,
+            'totalPages':(total+page_size-1)//page_size,'sort':sort}
 
 
 @app.post('/api/cases', status_code=201)

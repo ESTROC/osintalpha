@@ -36,6 +36,6 @@ async function click(key,value){
  assert(html.includes('Create account'),'admin create flow missing');
  assert(html.includes('name="password"'),'user password field missing');
  await click('nav','cases');
- assert(html.includes('No investigations match this filter'),'empty case state missing');
+ assert(html.includes('No investigations match these filters'),'empty case state missing');
  console.log('V3 console smoke: home, clues, admin, cases PASS');
 })().catch(err=>{console.error(err);process.exitCode=1});
