@@ -748,3 +748,8 @@ async def security_headers(req:Request,call_next):
     if req.url.path == '/' or req.url.path.startswith('/assets/'):
         res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     return res
+
+
+# Analyst workflows are imported after core auth, database and report helpers exist.
+from .v4 import router as analyst_workflow_router
+app.include_router(analyst_workflow_router)
