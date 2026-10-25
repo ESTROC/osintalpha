@@ -109,6 +109,19 @@ CREATE TABLE IF NOT EXISTS research_queries(
  message TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS research_queries_case ON research_queries(case_id,created_at);
+CREATE TABLE IF NOT EXISTS identity_pair_reviews(
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ left_evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ right_evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ decision TEXT NOT NULL,
+ rationale TEXT NOT NULL,
+ reviewer_id TEXT NOT NULL REFERENCES users(id),
+ reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS identity_pair_reviews_case ON identity_pair_reviews(case_id,reviewed_at);
+CREATE INDEX IF NOT EXISTS identity_pair_reviews_pair ON identity_pair_reviews(case_id,left_evidence_id,right_evidence_id,reviewed_at);
+
 CREATE TABLE IF NOT EXISTS candidate_profiles(
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  display_name TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',

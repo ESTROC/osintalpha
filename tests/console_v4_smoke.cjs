@@ -67,6 +67,7 @@ async function click(dataset,value){
  await click('tab','candidates');
  assert(markup.includes('Create an identity hypothesis'),'candidate workflow not rendered');
  assert(markup.includes('Identity source comparison'),'identity comparison workflow missing');
+ assert(markup.includes('Identity signal evaluation'),'identity quality metrics not rendered');
  assert(markup.includes('Sample Person · Delhi'),'saved hypothesis hidden');
  await click('tab','evidence');
  assert(markup.includes('Potential duplicate source records'),'source duplicate inspector not visible');

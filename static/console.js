@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v2 research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'e.g. Jane Researcher',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'e.g. Example Systems Ltd',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'e.g. example.org',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'e.g. 8.8.8.8',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -120,6 +120,15 @@ function caseCandidates(){
  (compared.matching.length?compared.matching.map(m=>'<p class="meta">'+h(m.field)+': '+h(m.value)+'</p>').join(''):'<p class="help">No explicit matching identifiers found.</p>')+
  '<strong>Differences requiring human interpretation</strong>'+
  (compared.differing.length?compared.differing.map(m=>'<p class="meta">'+h(m.field)+': '+h(m.left)+' / '+h(m.right)+'</p>').join(''):'<p class="help">No explicit different attributes recorded.</p>')+'</div>':'';
+ const metric=s.identityQuality||{},matrix=metric.confusion||{};
+ const quality='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div><div class="panel-title">Identity signal evaluation</div><div class="panel-meta">Against analyst-labelled public source pairs; not ground-truth identity accuracy.</div></div><span class="tag">'+Number(metric.latestLabelledPairs||0)+' labelled pairs</span></div><div class="panel-pad"><div class="stat-grid">'+[
+ ['SIGNAL PRECISION',metric.precisionAgainstAnalystLabels],
+ ['SIGNAL RECALL',metric.recallAgainstAnalystLabels],
+ ['FALSE ALERT RATE',metric.falseAlertRateAgainstAnalystLabels]
+ ].map(([name,value])=>'<div class="panel stat"><div class="stat-label">'+h(name)+'</div><div class="stat-number">'+(typeof value==='number'?(value*100).toFixed(1)+'%':'N/A')+'</div></div>').join('')+'</div><p class="help">'+h(metric.limitation||'An empty labelled set cannot establish measured identity quality.')+'</p>'+
+ (metric.sampleSufficientForInternalTrend?'':'<p class="help">Not enough diverse reviewed examples for even an internal trend. Collect at least 20 pairs with both classes represented.</p>')+
+ '<div class="meta">Review matches: '+Number(matrix.tp||0)+' · false signals: '+Number(matrix.fp||0)+' · missed signals: '+Number(matrix.fn||0)+' · correctly unflagged: '+Number(matrix.tn||0)+'</div></div></section>';
+ const labelForm=compared?'<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div class="panel-title">Record an analyst evaluation example</div></div><form id="identity-label-form" class="panel-pad input-stack"><input type="hidden" name="left_id" value="'+h(compared.left.recordId)+'"><input type="hidden" name="right_id" value="'+h(compared.right.recordId)+'"><label>Assessment of this record pair<select name="decision"><option value="different_people">Different people / not linked</option><option value="possible_same_person">Possible same person (unverified)</option></select></label><label>Why does the current public evidence support this label?<textarea name="rationale" minlength="30" maxlength="1500" required placeholder="Mention original accounts, conflicting identifiers or independent corroboration. Do not use a shared name alone."></textarea></label><button class="btn small" type="submit">Save review label</button><p class="help">Human labels are hypotheses, not verified identities. They measure internal signal agreement only.</p></form></section>':'';
  const sourceMatrix='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div><div class="panel-title">Identity source comparison</div><div class="panel-meta">Compare public attributes side by side. A shared display name is insufficient to link accounts.</div></div><span class="tag">'+records.length+' candidate records</span></div>'+
  (records.length>=2?'<form id="identity-compare-form" class="panel-pad input-stack"><div class="form-row">'+
  selectSource('left',compared?.left?.recordId)+selectSource('right',compared?.right?.recordId)+
@@ -133,7 +142,7 @@ function caseCandidates(){
  '<p class="help panel-pad">'+h(identity.notice||'This does not verify ownership or identity.')+'</p></section>';
 
  return '<div class="analyst-intro"><div><div class="eyebrow">IDENTITY RESOLUTION / ANALYST CONTROL</div><h2>Compare namesakes. Do not merge blindly.</h2><p>Group only records supported by matching public identifiers. An analyst confirmation is a documented decision, not legal identity verification.</p></div></div>'+
- sourceMatrix+ '<div class="grid2"><section class="panel"><div class="panel-head"><div class="panel-title">Candidate profiles ('+items.length+')</div></div>'+
+ sourceMatrix+quality+labelForm+'<div class="grid2"><section class="panel"><div class="panel-head"><div class="panel-title">Candidate profiles ('+items.length+')</div></div>'+
  (items.length?items.map(x=>'<article class="candidate-card"><div class="badge-row">'+tag(x.classification)+'</div><h3>'+h(x.display_name)+'</h3><p class="page-sub">'+h(x.reason||'No rationale yet.')+'</p><div class="meta">'+x.sources.length+' linked public-source record(s)</div>'+
  x.sources.map(y=>'<div class="sourcehealth">'+link(y.source_url,y.label)+' <span class="tag">'+h(y.status)+'</span></div>').join('')+
  '<form data-candidate-review="'+h(x.id)+'" class="input-stack"><label class="field-label">Analyst hypothesis</label><select name="classification">'+['unresolved','potential_match','excluded','confirmed_by_analyst'].map(v=>'<option value="'+v+'" '+(x.classification===v?'selected':'')+'>'+h(v.replaceAll('_',' '))+'</option>').join('')+'</select><textarea name="reason" maxlength="1500" aria-label="Reason for analyst hypothesis" placeholder="Explain corroborating or conflicting evidence">'+h(x.reason||'')+'</textarea><button class="btn small">Save decision</button></form>'+
@@ -287,9 +296,9 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.excerpts=[];s.identity=null;s.draft=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
- const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity,tasks,assignees,members,duplicates]=await Promise.all([
+ const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity,tasks,assignees,members,duplicates,quality]=await Promise.all([
    api('/api/cases/'+s.id+'/triage'),
    api('/api/cases/'+s.id+'/conversations'),
    api('/api/cases/'+s.id+'/search-history'),
@@ -305,10 +314,11 @@ async function loadResearchState(){
    api('/api/cases/'+s.id+'/tasks'),
    api('/api/cases/'+s.id+'/task-assignees'),
    api('/api/cases/'+s.id+'/members'),
-   api('/api/cases/'+s.id+'/duplicate-sources')
+   api('/api/cases/'+s.id+'/duplicate-sources'),
+   api('/api/cases/'+s.id+'/identity-quality')
  ]);
  s.triage=tr;s.conversations=conv.items||[];s.searchHistory=history.items||[];
- s.researchPlan=researchPlan;s.researchRuns=runs.items||[];s.candidates=candidates.items||[];s.intel=intel;s.webProviders=webProviders;s.changes=changes;s.jobs=jobs.items||[];s.excerpts=excerpts.items||[];s.identity=identity;s.tasks=tasks.items||[];s.taskTotal=tasks.total||0;s.taskAssignees=assignees.items||[];s.members=members;s.duplicateSources=duplicates;
+ s.researchPlan=researchPlan;s.researchRuns=runs.items||[];s.candidates=candidates.items||[];s.intel=intel;s.webProviders=webProviders;s.changes=changes;s.jobs=jobs.items||[];s.excerpts=excerpts.items||[];s.identity=identity;s.tasks=tasks.items||[];s.taskTotal=tasks.total||0;s.taskAssignees=assignees.items||[];s.members=members;s.duplicateSources=duplicates;s.identityQuality=quality;
  if(s.job?.id)s.job=await api('/api/cases/'+s.id+'/jobs/'+s.job.id);
  if(s.conversations.length)await loadConversation(s.conversations[0].id);
 }
@@ -462,9 +472,15 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','task-form','member-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
+if(f.id==='identity-label-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ await api('/api/cases/'+s.id+'/identity-reviews',{method:'POST',body:d});
+ s.identityQuality=await api('/api/cases/'+s.id+'/identity-quality');render();
+ toast('Analyst identity-signal review saved. This is not independently verified ground truth.');
+}
 if(f.id==='identity-compare-form'){
  const d=Object.fromEntries(new FormData(f).entries());
  s.identity=await api('/api/cases/'+s.id+'/identity-analysis?left='+encodeURIComponent(d.left)+'&right='+encodeURIComponent(d.right));

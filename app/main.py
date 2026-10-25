@@ -33,7 +33,7 @@ async def lifespan(_app):
     db.init_db()
     yield
 
-app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.5.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
+app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.6.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
 AUTH_TRIES = {}
 SESSION_LENGTH = 60 * 60 * 8
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '7.5.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '7.6.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -922,3 +922,8 @@ app.include_router(case_members_router)
 # Conservative same-document/source candidate detection.
 from .duplicates import router as duplicate_source_router
 app.include_router(duplicate_source_router)
+
+
+# Human-labelled identity-link review and internal signal-evaluation metrics.
+from .quality import router as identity_quality_router
+app.include_router(identity_quality_router)
