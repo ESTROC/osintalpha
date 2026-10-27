@@ -958,3 +958,11 @@ app.include_router(smart_search_router)
 # Case-scoped agency toolkit on top of the existing V8 core.
 from .agency_ops import router as agency_operations_router
 app.include_router(agency_operations_router)
+
+# Optional explicitly consented second-engine source-candidate check.
+from .cross_engine import router as cross_engine_router
+app.include_router(cross_engine_router)
+
+# Case-scoped saved public-source search (not a worldwide independent index).
+from .local_index import router as local_index_router
+app.include_router(local_index_router)
