@@ -478,6 +478,7 @@ class ChatMessage(BaseModel):
     provider:Literal['local','groq','grok']|None=None
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
+    brave_context:bool=False
     session_id:str|None=Field(default=None,max_length=64)
 
 
@@ -511,8 +512,10 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     from .analyst import offline_guidance, make_system_prompt, normalize_ai_response, GROQ_RESPONSE_SCHEMA
     ca,ev,runs=load_report(case_id,actor)
     provider=body.provider or ('grok' if body.use_grok else 'local')
-    if body.web_search and provider!='groq':
-        raise HTTPException(422,'Public web research requires GroqCloud and explicit provider selection.')
+    if (body.web_search or body.brave_context) and provider!='groq':
+        raise HTTPException(422,'Live public-web research requires GroqCloud and explicit provider selection.')
+    if body.brave_context and body.web_search:
+        raise HTTPException(422,'Choose Brave contextual retrieval or Groq browser search for this request, not both.')
     records=chat_evidence(ev)
     history=chat_history(body)
     question=body.question.strip()
@@ -553,6 +556,10 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         claims=[dict(x) for x in conn.execute(
            'SELECT claim_text,stance FROM claim_links WHERE case_id=? ORDER BY created_at DESC LIMIT 30',(case_id,))]
     clues=dict(ctx) if ctx else {}
+    live_brave={'sources':[], 'searchedNow':False}
+    if body.brave_context:
+        from .brave_context import retrieve
+        live_brave=await retrieve(ca,question,clues)
     from .retrieval import rank_case_evidence
     selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
     records=chat_evidence(selected)
@@ -572,12 +579,13 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
              'knownPublicClues':clues,'candidateHypotheses':groups,
              'analystSourceClaims':claims,'retrievalCoverage':retrieval,
              'untrustedCapturedSourceText':passages,
+             'freshUnverifiedBraveContext':live_brave['sources'] if body.brave_context else [],
              'evidence':records,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
         raise HTTPException(409,'Groq browser search currently requires a GPT-OSS model.')
-    system=make_system_prompt(web_search=body.web_search)
+    system=make_system_prompt(web_search=body.web_search,brave_context=body.brave_context)
     if provider=='groq':
         model=os.getenv('GROQ_MODEL','openai/gpt-oss-120b')
         messages=[{'role':'system','content':system},
@@ -604,7 +612,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         payload={'model':model,'input':messages,'max_output_tokens':1600,'store':False}
         endpoint='https://api.x.ai/v1/responses'
     try:
-        async with httpx.AsyncClient(timeout=45,follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=35 if body.brave_context else 45,follow_redirects=False) as client:
             resp=await client.post(endpoint,json=payload,
                         headers={'Authorization':f'Bearer {key}'})
             resp.raise_for_status()
@@ -618,15 +626,23 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
-        if body.web_search:
+        if body.brave_context:
+            from .brave_context import clean_answer_links
+            response['answer']=clean_answer_links(response['answer'],live_brave['sources'],records)
+            response['webLeads']=[{'title':p['title'],'url':p['url']}
+                                  for p in live_brave['sources']]
+        elif body.web_search:
             from .analyst import extract_web_leads
             response['webLeads']=extract_web_leads(output)
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
-                    ': '+str(len(records))+' evidence records')
+                    ': '+str(len(records))+' evidence records'
+                    +(', live Brave sources '+str(len(live_brave['sources'])) if body.brave_context else ''))
         response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
-                'webSearch':bool(body.web_search),
-                'note':'Search output is a lead, not independent identity verification. Check original sources.'}
+                'webSearch':bool(body.web_search or body.brave_context),
+                'braveContextUsed':bool(body.brave_context),
+                'freshSourcesCount':len(live_brave['sources']),
+                'note':'Fresh web extracts are attributed leads, not verified identities or independently proven claims.'}
     except httpx.HTTPStatusError as exc:
         code=exc.response.status_code
         if code==401: message='The provider rejected the API key. Check its key and account.'
