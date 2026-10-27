@@ -64,6 +64,9 @@ def hydrate(case,job,steps):
 def create_job(case_id:str,body:NewJob,actor=Depends(core.protect)):
     with db.connect() as c:
         case=core.case_or_404(c,case_id,actor)
+        from .research_safety import require_safe_remote_query
+        if body.allow_web or body.mode=='groq':
+            require_safe_remote_query(case['query']+' '+body.objective,case['subject_type'])
         if body.allow_web and not body.consent:
             raise HTTPException(422,'Explicit consent is required before sending a subject to external web search.')
         if body.allow_web and not os.getenv('BRAVE_SEARCH_API_KEY','').strip():

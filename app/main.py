@@ -326,6 +326,8 @@ class CollectInput(BaseModel):
 async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
     with db.connect() as c:
         case=case_or_404(c,case_id,actor)
+    from .research_safety import require_safe_remote_query
+    require_safe_remote_query(case['query'],case['subject_type'])
     providers=list(dict.fromkeys(body.providers))
     if len(providers)>8: raise HTTPException(422,'At most eight sources per run.')
     from .research_authorization import require_scope_if_enabled
@@ -635,6 +637,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     from .research_authorization import require_scope_if_enabled
     with db.connect() as scope_db:
         require_scope_if_enabled(scope_db,case_id)
+    from .research_safety import require_safe_remote_query
+    require_safe_remote_query(question+' '+ca['query'],ca['subject_type'])
     keyname='GROQ_API_KEY' if provider=='groq' else 'XAI_API_KEY'
     key=os.getenv(keyname,'').strip()
     if not key:
@@ -767,6 +771,13 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records'
                     +(', live Brave sources '+str(len(live_brave['sources'])) if body.brave_context else ''))
+        from .research_safety import guard_high_risk_claim
+        high_risk=guard_high_risk_claim(response['answer'],question,ca['subject_type'])
+        if high_risk['action']=='withhold_unreviewed_serious_allegation':
+            response['answer']=high_risk['answer']
+            response['evidenceIds']=[]
+            response['needsDisambiguation']=True
+        response['highRiskReview']=high_risk['action']
         response['answerQuality']={
             'status':'unverified_source_synthesis',
             'verifiedIdentity':False,
