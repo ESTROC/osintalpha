@@ -79,3 +79,18 @@
 #job-form button:disabled,.panel button:disabled{opacity:.45;cursor:not-allowed}
 blockquote{margin:10px 0;border-left:2px solid var(--accent);padding:7px 12px;color:var(--text);line-height:1.6}
 @media(max-width:800px){#job-form .form-row{flex-direction:column}}
+
+
+/* V7.7 public candidate portfolio: reviewable original-source identities only. */
+.profile-list{display:grid;gap:14px;padding:15px;max-height:850px;overflow:auto}
+.profile-card{border:1px solid #344257;border-radius:12px;padding:15px;background:rgba(15,26,44,.78);min-width:0}
+.profile-top{display:flex;align-items:center;gap:13px;margin-bottom:12px}
+.profile-avatar{width:64px;height:64px;min-width:64px;object-fit:cover;border-radius:11px;border:1px solid #394e70}
+.profile-avatar-empty{display:grid;place-items:center;background:#202d41;color:#abbcde}
+.profile-info{flex:1;min-width:0}
+.profile-info h3{margin:0 0 5px;font-size:15px;overflow-wrap:anywhere}
+.profile-info p{margin:0 0 8px;color:#aab9ce;font-size:12px}
+.profile-card .inline-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:13px}
+.profile-card .meta{margin:8px 0;overflow-wrap:anywhere}
+.profile-card .page-sub{font-size:13px;overflow-wrap:anywhere}
+@media(max-width:700px){.profile-list{padding:10px;max-height:none}.profile-top{align-items:flex-start}.profile-avatar{width:52px;height:52px;min-width:52px}}
