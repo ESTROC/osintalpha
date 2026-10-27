@@ -267,6 +267,9 @@ function caseAssistant(){
  (s.smartCoverage?'<div class="badge-row">'+Object.entries(s.smartCoverage).map(([k,v])=>'<span class="tag '+(v==='ok'?'ok':v==='error'?'bad':v==='partial'?'warn':'')+'">'+h(({structured:'Structured APIs',braveIndex:'Brave Web',braveContext:'Brave Context',groq:'Groq Analysis'})[k])+' · '+h(v.replaceAll('_',' '))+'</span>').join('')+'</div>':'')+
  s.smartIssues.map(x=>'<div class="callout warn">'+h(x)+'</div>').join('')+'</div></section>':'';
  const sourcePanel='<details class="smart-sources" '+(s.messages.length?'':'open')+'><summary>Saved source leads · '+(s.case?.evidence||[]).length+' records (not verified)</summary><div class="smart-source-list">'+(sourceCards||'<div class="empty">No source records yet. A missing result is not proof a record does not exist.</div>')+'</div></details>';
+ const publicPhotos=(s.portfolio?.items||[]).filter(x=>x.photoUrl&&/^https:\/\/avatars\.githubusercontent\.com\/u\/[0-9]+(?:[/?#]|$)/.test(x.photoUrl)).slice(0,5);
+ const photosPanel=publicPhotos.length?'<section class="panel public-account-assets"><div class="panel-head"><strong class="panel-title">Publisher account images · identity unverified</strong><span class="tag">No photo identity matching</span></div><div class="account-asset-row">'+
+ publicPhotos.map(x=>'<div class="account-asset"><img src="'+h(x.photoUrl)+'" alt="Candidate public account image; ownership not confirmed" loading="lazy" referrerpolicy="no-referrer"><strong>'+h(x.displayName)+'</strong>'+link(x.sourceUrl,'Original account')+'</div>').join('')+'</div></section>':'';
  const city=s.case?.context?.city||'';
  const mapNote=s.portfolioLocation;
  const mapPanel='<section class="intel-map-panel"><div class="intel-map-explainer"><div class="eyebrow">GEOSPATIAL CONTEXT</div><strong>Public geography, not person tracking</strong>'+
@@ -275,7 +278,7 @@ function caseAssistant(){
  (mapNote?'<p class="help">'+h(mapNote.notice)+'</p>':'')+'</div>'+
  (mapNote?'<div class="map" id="profile-map"><div class="map-fallback">Loading public city tiles…</div></div>':
  '<div class="intel-map-empty"><div class="map-fallback">Map available once a public city/region clue is provided and preview authorized.</div></div>')+'</section>';
- return statusCard+sourcePanel+mapPanel+'<div class="ai-layout"><section class="panel"><div class="panel-head"><div><div class="panel-title">Case research assistant</div><div class="panel-meta">Conversation, identity disambiguation and attributable evidence</div></div><span class="tag '+(p==='local'?'warn':'ok')+'">'+h(({local:'OFFLINE RULES · NO AI',groq:'GROQCLOUD · AI',grok:'XAI GROK · AI'})[p])+'</span></div>'+
+ return statusCard+sourcePanel+photosPanel+mapPanel+'<div class="ai-layout"><section class="panel"><div class="panel-head"><div><div class="panel-title">Case research assistant</div><div class="panel-meta">Conversation, identity disambiguation and attributable evidence</div></div><span class="tag '+(p==='local'?'warn':'ok')+'">'+h(({local:'OFFLINE RULES · NO AI',groq:'GROQCLOUD · AI',grok:'XAI GROK · AI'})[p])+'</span></div>'+
  '<div id="chat-history" class="chat-history">'+messages+'</div>'+
  '<form id="ask-form" class="chat-composer"><textarea name="question" maxlength="2000" required placeholder="Ask a follow-up question about the retrieved evidence"></textarea><button type="submit" class="btn primary" '+(s.busy?'disabled':'')+'>'+(s.busy?'Analyzing…':'Send →')+'</button></form>'+
  '</section><aside class="panel"><div class="panel-head"><div class="panel-title">Research intelligence</div></div><div class="panel-pad input-stack">'+intro+
@@ -445,6 +448,7 @@ async function smartLaunch(form){
     }
   }
   await fetchCase();
+  try{s.portfolio=await api('/api/cases/'+started.id+'/public-portfolio')}catch(err){s.smartIssues.push('Public profile assets unavailable: '+err.message)}
   s.smartStage=s.provider==='groq'?'Grounding Groq in collected records and fresh Brave context':'Organizing saved public-source leads';
   s.messages=[{role:'user',text:question}];render();
   if(s.provider==='groq'){
