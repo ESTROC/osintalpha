@@ -1203,6 +1203,14 @@ app.include_router(cross_engine_router)
 from .research_authorization import router as case_authorization_router
 app.include_router(case_authorization_router)
 
+# Explicit public trade leads, registry reference workflow and sourced alias hypotheses.
+from .local_discovery import router as business_discovery_router
+app.include_router(business_discovery_router)
+
+# Source planning trace and explicitly recorded official negative-check reviews.
+from .query_diagnostics import router as query_diagnostics_router
+app.include_router(query_diagnostics_router)
+
 # Case-scoped saved public-source search (not a worldwide independent index).
 from .local_index import router as local_index_router
 app.include_router(local_index_router)
