@@ -87,7 +87,7 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
     query = composed_query(case, question, clues)
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(timeout=28, follow_redirects=False, trust_env=False)
+        client = httpx.AsyncClient(timeout=14, follow_redirects=False, trust_env=False)
     try:
         response = await client.post(
             'https://api.search.brave.com/res/v1/llm/context',
