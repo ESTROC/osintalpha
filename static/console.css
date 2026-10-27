@@ -190,3 +190,18 @@ body{overflow-x:clip}
  .smart-hero .form-row{grid-template-columns:1fr}.smart-hero{padding:25px 18px}
  .hero.smart-hero h1{font-size:clamp(26px,7vw,43px)}}
 @media (prefers-reduced-motion:reduce){.smart-hero *, .mission-map *{animation:none!important;transition:none!important}}
+
+
+.intel-map-empty{display:grid;place-items:center;min-height:235px;background:
+ radial-gradient(circle at 50% 45%,#1c3653,#081523 70%),
+ repeating-linear-gradient(90deg,transparent,transparent 26px,rgba(148,178,232,.06) 27px);
+ border-left:1px solid #2b3c53}
+.public-account-assets{margin:0 0 16px;overflow:hidden}
+.account-asset-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px;padding:17px}
+.account-asset{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-width:0;
+ background:#0c1524;border:1px solid #2b3b52;padding:12px;border-radius:11px}
+.account-asset img{height:74px;width:74px;border-radius:14px;object-fit:cover;
+ border:1px solid #3f526c;background:#111e2d}
+.account-asset strong{font-size:12px;overflow-wrap:anywhere}
+.account-asset .text-link{font-size:11px;white-space:normal}
+@media(max-width:790px){.intel-map-empty{min-height:145px;border-left:0;border-top:1px solid #2b3c53}}
