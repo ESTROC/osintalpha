@@ -679,6 +679,21 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        # Separate observed candidates from confirmed person identity. Even a
+        # source with matching name, URL and exact passage is not proof that
+        # the searched person owns that profile.
+        from .evidence_gates import guard_synthesis
+        vetted=guard_synthesis(
+            response['answer'],question,ca['subject_type'],selected,
+            ca['query'],clues,has_fresh_context=bool(live_brave['sources']),
+            has_verified_quote=bool(passages),
+            needs_disambiguation=bool(response.get('needsDisambiguation')))
+        if vetted['action'] in ('abstain','candidate_only'):
+            response['answer']=vetted['answer']
+            response['evidenceIds']=[]
+            response['needsDisambiguation']=ca['subject_type']=='person'
+        response['evidenceGate']=vetted['gate']
+        response['evidenceGateAction']=vetted['action']
         # Source-absence review gate runs AFTER the response so clarifying
         # questions still work. Unsupported assertive narratives are withheld.
         if (not records and not live_brave['sources'] and not body.web_search
