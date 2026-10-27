@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from . import main as core
 from .brave_context import BLOCKED_LIVE_TRACKING
 from .connectors import CATALOG, valid_domain, valid_public_ip
+from .query_parse import parse_question
 
 router = APIRouter()
 
@@ -39,27 +40,13 @@ def words(question):
 
 
 def looks_name(query):
-    """Best-effort initial subject extraction; never a verified identity."""
-    text = re.sub(r'^(?:who is|who was|find|search for|research|tell me about)\s+', '',
-                  words(query), flags=re.I)
-    # Treat these terms as contextual topics, not parts of a person's name.
-    boundary = re.search(
-        r'\s+(?:cyber|security|army|navy|air\s+force|worked|working|college|'
-        r'student|plumber|electrician|developer|researcher|professor|'
-        r'where|in|at|from|related|experience|website|github)\b',
-        text, flags=re.I)
-    candidate = text[:boundary.start()] if boundary else text
-    tokens = candidate.split()
-    if not 1 <= len(tokens) <= 4:
-        return ''
-    if not all(re.fullmatch(r"[A-Za-z][A-Za-z'.-]{1,38}", x) for x in tokens):
-        return ''
-    if tokens[0].casefold() in {
-        'what','how','when','where','which','does','did','can','please','show',
-        'student','plumber','electrician','business','company','school','shop'
-    }:
-        return ''
-    return candidate[:160] if len(tokens)>1 else ''
+    """Best-effort subject extraction; never a verified identity.
+
+    Delegates to the typed parser (app/query_parse.py). Returns '' unless a
+    multi-token person-name span is found, so callers fall back to the full
+    original question rather than a silently truncated or topic-polluted name.
+    """
+    return parse_question(query).subject_text[:160]
 
 
 def deterministic_route(question, explicit_type=None):
@@ -95,10 +82,16 @@ def deterministic_route(question, explicit_type=None):
         providers=['gdelt','wikipedia']
     else:
         providers=[]  # Web index is broader for ambiguous/non-professional queries.
+    parsed = parse_question(q)
+    # Person-identity prompts only make sense for person-type questions.
+    person_q = kind == 'person'
     return {'subjectType':kind,'subject':subject,'context':ctx,
             'providers':providers,
             'strategy':'Deterministic relevance routing; broad Brave web context if enabled',
             'aiPlanned':False,
+            'parsed':parsed.as_dict(),
+            'needsClarification':bool(person_q and parsed.needs_clarification),
+            'clarification':list(parsed.clarification_prompts) if person_q else [],
             'caveat':'Subject classification and all person/name matches are tentative.'}
 
 
@@ -176,6 +169,9 @@ async def ai_route(question, fallback):
             'providers':chosen,
             'strategy':'Groq-assisted allowed-source routing; Brave discovery separate',
             'aiPlanned':True,
+            # Parser output and clarification state come from the deterministic
+            # pass; the model may not change or clear them.
+            **{k:fallback[k] for k in ('parsed','needsClarification','clarification') if k in fallback},
             'caveat':'Source planning is not identity verification.'}
 
 
