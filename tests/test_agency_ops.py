@@ -115,3 +115,65 @@ def test_metrics_status_and_no_false_independence(client,auth,case):
 
 def test_answer_diff_denies_cross_case_access(client,auth,case):
     assert client.get('/api/cases/'+case+'/answer-diff?left=x&right=y').status_code==404
+
+
+def test_review_tasks_batch_and_redacted_export(client,auth,case):
+    e=client.post('/api/cases/'+case+'/evidence',headers=auth,json={
+        'label':'A public lead about two namesakes','summary':'Review original record and potential namesakes',
+        'source_url':'https://example.org/name'}).json()['id']
+    p='/api/cases/'+case
+    suggested=client.post(p+'/suggest-review-tasks?limit=2',headers=auth)
+    assert suggested.status_code==200 and suggested.json()['created']==1
+    assert client.post(p+'/suggest-review-tasks',headers=auth).json()['created']==0
+    task=suggested.json()['taskIds'][0]
+    # Bulk verification/completion must be impossible.
+    assert client.post(p+'/tasks/batch',headers=auth,json={
+        'ids':[task],'status':'done','note':'Should not complete with a batch operation'}).status_code==422
+    updated=client.post(p+'/tasks/batch',headers=auth,json={
+        'ids':[task],'status':'awaiting_review',
+        'note':'This candidate needs exact-source attribution before closure.'})
+    assert updated.status_code==200 and updated.json()['changed']==1
+    preview=client.get(p+'/export-preview?reviewed_only=false&redact_labels=true').json()
+    assert preview['counts']['included']==1
+    assert preview['preview'][0]['label']=='[redacted candidate label]'
+    assert preview['preview'][0]['url'] is None
+    assert preview['signedOff'] is False
+
+
+def test_case_to_case_comparison_requires_both_permissions(client,auth,case):
+    second=client.post('/api/cases',headers=auth,json={
+        'title':'Separate authorized study','subject_type':'person','query':'Second Candidate',
+        'purpose':'Synthetic related-source overlap validation','authority_confirmed':True}).json()['id']
+    path='/api/agency/compare-cases?left='+case+'&right='+second
+    data=client.get(path).json()
+    assert data['commonSources']==0 and data['left']['records']==0
+    assert client.get('/api/agency/compare-cases?left='+case+'&right=not-a-case').status_code==404
+
+
+def test_public_cam_freshness_whitelist_and_canary_requires_optin(client,auth,monkeypatch):
+    from app.connectors import public_tfl_still
+    url='https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07450.jpg'
+    assert public_tfl_still(url)==url
+    assert public_tfl_still('https://example.org/img.jpg')==''
+    assert client.post('/api/research/provider-canary',headers=auth,json={
+        'provider':'github','consent':False}).status_code==422
+    assert client.post('/api/research/provider-canary',headers=auth,json={
+        'provider':'not-real','consent':True}).status_code==422
+    from app import connectors
+    async def fake_collect(provider,query,kind):
+        return []
+    monkeypatch.setattr(connectors,'collect_one',fake_collect)
+    ok=client.post('/api/research/provider-canary',headers=auth,json={
+        'provider':'github','consent':True})
+    assert ok.status_code==200 and ok.json()['status']=='empty'
+
+
+def test_explicit_locale_validation_for_search_context():
+    from app.v5 import WebSearchInput
+    from app.main import ChatMessage
+    from pydantic import ValidationError
+    assert WebSearchInput(freshness='pw',country='IN',search_lang='hi').freshness=='pw'
+    assert ChatMessage(question='Public historical claims',freshness='py',country='IN').country=='IN'
+    try:WebSearchInput(freshness='unlimited')
+    except ValidationError:pass
+    else:raise AssertionError('Invalid Brave freshness accepted')
