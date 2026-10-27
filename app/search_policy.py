@@ -12,7 +12,7 @@ from .query_parse import parse_question
 
 TASK_PATTERNS={
     'passive_technical':r'\b(dns|domain|ip address|passive scan|certificate transparency|whois)\b',
-    'public_security':r'\b(cve|vulnerability|advisory|cybersecurity|infosec|malware|security research)\b',
+    'public_security':r'\b(cve|vulnerability|advisory|cybersecurity|cyber[ -]security|infosec|malware|security research)\b',
     'academic':r'\b(research paper|publication|orcid|researcher|professor|scholar|academic|scientific)\b',
     'business':r'\b(plumb(?:er|ing)|electrician|repair|trade|contractor|business listing|shop|local service|restaurant)\b',
     'legal_entity':r'\b(registration|incorporated|company number|llp|pvt|private limited|annual report|legal entity)\b',
