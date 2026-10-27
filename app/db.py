@@ -314,6 +314,12 @@ CREATE TABLE IF NOT EXISTS case_assessments(
 );
 
 
+CREATE TABLE IF NOT EXISTS assessment_review_baselines (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_digest TEXT NOT NULL,
+ saved_at TEXT NOT NULL,
+ saved_by TEXT NOT NULL REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS research_aliases (
  id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  alias TEXT NOT NULL, alias_type TEXT NOT NULL, source_url TEXT NOT NULL DEFAULT '',

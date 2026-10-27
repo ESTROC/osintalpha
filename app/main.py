@@ -1191,6 +1191,10 @@ app.include_router(public_portfolio_router)
 from .smart_search import router as smart_search_router
 app.include_router(smart_search_router)
 
+# Objective sufficiency is independent of workflow completion and result volume.
+from .decision_readiness import router as decision_readiness_router
+app.include_router(decision_readiness_router)
+
 # Case-scoped agency toolkit on top of the existing V8 core.
 from .agency_ops import router as agency_operations_router
 app.include_router(agency_operations_router)
