@@ -442,3 +442,46 @@ def export_preview(case_id:str,reviewed_only:bool=True,redact_labels:bool=True,a
                              pack['signoff']['decision']=='reviewed_with_limitations'),
             'redactLabels':redact_labels,'reviewedOnly':reviewed_only,
             'notice':'Preview is not a signed or automatically redacted PDF. A reviewer must inspect the final export and sources.'}
+
+
+class CanaryInput(BaseModel):
+    provider:Literal['github','stackoverflow','openalex','crossref','gleif','wikipedia','wikidata','gdelt']
+    consent:bool=False
+
+@router.post('/api/research/provider-canary')
+async def provider_canary(body:CanaryInput,actor=Depends(core.protect)):
+    """On-demand real public API compatibility smoke; no private case or personal input."""
+    if not body.consent:
+        raise HTTPException(422,'Authorize a real upstream provider canary request.')
+    from .connectors import collect_one
+    samples={
+        'github':('octocat','person'),
+        'stackoverflow':('John Carmack','person'),
+        'openalex':('Ada Lovelace','person'),
+        'crossref':('Ada Lovelace','person'),
+        'gleif':('Apple Inc','organization'),
+        'wikipedia':('Ada Lovelace','person'),
+        'wikidata':('Ada Lovelace','person'),
+        'gdelt':('NASA','organization'),
+    }
+    query,kind=samples[body.provider]
+    try:
+        results=await collect_one(body.provider,query,kind)
+        status='ok' if results else 'empty'
+        note='Received compatible public-source candidate records' if results else 'No results for fixed canary term; this alone does not indicate outage'
+        count=len(results)
+    except Exception as exc:
+        status='error';note='Provider request unsuccessful: '+type(exc).__name__;count=0
+    core.write_audit(actor['id'],'provider_canary','source',body.provider,status)
+    return {'provider':body.provider,'status':status,'candidateCount':count,
+            'checkedAt':core.iso_now(),'sampleQuery':query,'message':note,
+            'notice':'Manual live connectivity check only; this does not verify relevance, coverage, uptime or an identity match.'}
+
+@router.get('/api/research/model-configuration')
+def model_configuration(actor=Depends(core.actor_from_cookie)):
+    import os
+    model=os.getenv('GROQ_MODEL','openai/gpt-oss-120b')
+    return {'provider':'Groq','model':model,'configured':bool(os.getenv('GROQ_API_KEY')),
+            'toolModes':['structured_output','browser_search_separate'],
+            'validation':'configured only, not a live model capability probe',
+            'testedAgainst':'Mocked API and CI model fixtures; real-model release acceptance still required.'}
