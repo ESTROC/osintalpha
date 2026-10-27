@@ -501,7 +501,7 @@ async function smartLaunch(form){
     s.smartStage='Retrieving attributable results from Brave Search';render();
     try{
       const indexed=await api('/api/cases/'+started.id+'/web-discovery',{
-        method:'POST',body:{query:webQuestion,depth:1,lens:'general',consent:true,freshness,country,search_lang}});
+        method:'POST',body:{query:webQuestion,depth:1,lens:started.plan.discoveryLens||'general',consent:true,freshness,country,search_lang}});
       s.smartCoverage.braveIndex=indexed.errors?'partial':indexed.returned?'ok':'empty';
       if(indexed.errors)s.smartIssues.push('Brave web discovery reported '+indexed.errors+' provider error(s).');
     }catch(error){
