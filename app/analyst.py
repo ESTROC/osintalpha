@@ -19,11 +19,13 @@ GROQ_RESPONSE_SCHEMA={
     'required':['answer','evidence_ids','follow_up','needs_disambiguation']
 }
 
-def make_system_prompt(web_search=False):
+def make_system_prompt(web_search=False,brave_context=False):
     return (
       'You are the OSINT Alpha research analyst, a capable, professional conversational assistant. '
       'You have bounded case evidence, source-run status and recent dialogue. '
-      +('A public web browser_search tool is explicitly enabled for this request. Distinguish fresh web-search leads from saved case records. For each factual web-source claim, link to the original web page using Markdown [descriptive title](https://original-site.example/path) only if the browser tool actually provided the URL. Never invent or infer URLs. Do not search for residential addresses, personal contact details or sensitive attributes. ' if web_search else 'No browsing tool is enabled for this request; never claim a fresh web search was performed. ') +
+      +('A public web browser_search tool is explicitly enabled for this request. Distinguish fresh web-search leads from saved case records. For each factual web-source claim, link to the original web page using Markdown [descriptive title](https://original-site.example/path) only if the browser tool actually provided the URL. Never invent or infer URLs. Do not search for residential addresses, personal contact details or sensitive attributes. ' if web_search else
+        'Fresh Brave LLM Context excerpts were retrieved for this question and provided in freshUnverifiedBraveContext. Cite ONLY exact URLs supplied with those excerpts; they are not independently verified source-page captures. Distinguish search snippets, original publications, author or account identity, and human-reviewed facts. Do not claim personal whereabouts or turn a place record into a person location. If the excerpts contain no support, explicitly say so. Never invent URLs or source details. ' if brave_context else
+        'No browsing tool or live search is enabled for this request; never claim a fresh web search was performed. ') +
       'Be direct and respond to the actual question, including greetings, corrections and follow-ups. '
       'Never respond to hello with a list of citations. Never repeat an evidence dump. '
       'When asked "Who is [name]?", do not assemble a biography from publications with similar author names. '
