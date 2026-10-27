@@ -895,7 +895,7 @@ async def security_headers(req:Request,call_next):
     res.headers['X-Frame-Options']='DENY'
     res.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
     if req.url.path == '/' or req.url.path.startswith('/assets/'):
-        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com https://avatars.githubusercontent.com https://s3-eu-west-1.amazonaws.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     return res
 
 
