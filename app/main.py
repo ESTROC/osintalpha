@@ -1211,6 +1211,10 @@ app.include_router(case_authorization_router)
 from .local_discovery import router as business_discovery_router
 app.include_router(business_discovery_router)
 
+# Source-linked typed public identifiers, candidate graph, no automatic identity merge.
+from .entity_graph import router as entity_graph_router
+app.include_router(entity_graph_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)

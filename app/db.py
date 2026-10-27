@@ -137,6 +137,20 @@ CREATE TABLE IF NOT EXISTS candidate_profiles(
  created_at TEXT NOT NULL,updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS candidate_profiles_case ON candidate_profiles(case_id,updated_at);
+CREATE TABLE IF NOT EXISTS candidate_public_identifiers (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ profile_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL,
+ canonical_value TEXT NOT NULL,
+ asserted_url TEXT NOT NULL,
+ review_state TEXT NOT NULL DEFAULT 'unverified_identifier',
+ created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,
+ UNIQUE(case_id,profile_id,evidence_id,kind,canonical_value)
+);
+CREATE INDEX IF NOT EXISTS candidate_public_identifiers_case ON candidate_public_identifiers(case_id,profile_id,kind);
 CREATE TABLE IF NOT EXISTS candidate_evidence(
  profile_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
