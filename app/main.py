@@ -479,6 +479,9 @@ class ChatMessage(BaseModel):
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
     brave_context:bool=False
+    freshness:Literal['all','pd','pw','pm','py']='all'
+    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     session_id:str|None=Field(default=None,max_length=64)
 
 
@@ -559,7 +562,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     live_brave={'sources':[], 'searchedNow':False}
     if body.brave_context:
         from .brave_context import retrieve
-        live_brave=await retrieve(ca,question,clues)
+        live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang)
     from .retrieval import rank_case_evidence
     selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
     records=chat_evidence(selected)
