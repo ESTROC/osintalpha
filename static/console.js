@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v7.9 unified public research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:''};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'Full name or public handle',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'Organization or registered business',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'Public domain name',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'Public IP address',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -264,6 +264,7 @@ function caseAssistant(){
  '<section class="panel smart-status"><div class="panel-head"><strong class="panel-title">Search coverage and source trace</strong>'+tag(s.smartStage?'researching':'candidate')+'</div>'+
  '<div class="panel-pad"><p class="page-sub">'+h(s.smartStage||'Search run completed; review candidate records and verify identities.')+'</p>'+
  (route?'<div class="badge-row"><span class="tag">Subject (tentative): '+h(route.subject)+'</span><span class="tag">Router: '+h(route.aiPlanned?'Groq-guided':'Rules fallback')+'</span><span class="tag">Selected APIs: '+h(route.providers.join(', ')||'Web index only')+'</span></div><p class="help">'+h(route.caveat)+'</p>':'')+
+ (s.smartCoverage?'<div class="badge-row">'+Object.entries(s.smartCoverage).map(([k,v])=>'<span class="tag '+(v==='ok'?'ok':v==='error'?'bad':v==='partial'?'warn':'')+'">'+h(({structured:'Structured APIs',braveIndex:'Brave Web',braveContext:'Brave Context',groq:'Groq Analysis'})[k])+' · '+h(v.replaceAll('_',' '))+'</span>').join('')+'</div>':'')+
  s.smartIssues.map(x=>'<div class="callout warn">'+h(x)+'</div>').join('')+'</div></section>':'';
  const sourcePanel='<details class="smart-sources" '+(s.messages.length?'':'open')+'><summary>Saved source leads · '+(s.case?.evidence||[]).length+' records (not verified)</summary><div class="smart-source-list">'+(sourceCards||'<div class="empty">No source records yet. A missing result is not proof a record does not exist.</div>')+'</div></details>';
  const city=s.case?.context?.city||'';
@@ -352,7 +353,7 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
 async function loadResearchState(){
  const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity,tasks,assignees,members,duplicates,quality]=await Promise.all([
    api('/api/cases/'+s.id+'/triage'),
@@ -404,7 +405,7 @@ async function smartLaunch(form){
  const d=Object.fromEntries(new FormData(form).entries());
  const question=String(d.question||'').trim();
  if(!question||s.busy)return;
- s.busy=true;s.smartStage='Planning relevant public sources';s.smartIssues=[];s.smartQuestion=question;render();
+ s.busy=true;s.smartStage='Planning relevant public sources';s.smartIssues=[];s.smartQuestion=question;s.smartCoverage={structured:'not_run',braveIndex:'not_run',braveContext:'not_run',groq:'not_run'};render();
  try{
   const started=await api('/api/search/start',{method:'POST',body:{
     question,purpose:(d.purpose||'Analyst-confirmed legitimate public-source inquiry'),
@@ -426,9 +427,10 @@ async function smartLaunch(form){
     try{
       const collected=await api('/api/cases/'+started.id+'/collect',{method:'POST',body:{providers}});
       const failures=(collected.results||[]).filter(r=>r.status==='error');
+      s.smartCoverage.structured=failures.length?'partial':'ok';
       if(failures.length)s.smartIssues.push(failures.length+' structured source(s) unavailable; check original source coverage.');
     }catch(error){
-      s.smartIssues.push('Some structured sources could not be collected: '+error.message);
+      s.smartCoverage.structured='error';s.smartIssues.push('Some structured sources could not be collected: '+error.message);
     }
   }
   if(started.braveConfigured){
@@ -436,9 +438,10 @@ async function smartLaunch(form){
     try{
       const indexed=await api('/api/cases/'+started.id+'/web-discovery',{
         method:'POST',body:{query:question,depth:1,lens:'general',consent:true}});
+      s.smartCoverage.braveIndex=indexed.errors?'partial':indexed.returned?'ok':'empty';
       if(indexed.errors)s.smartIssues.push('Brave web discovery reported '+indexed.errors+' provider error(s).');
     }catch(error){
-      s.smartIssues.push('Public web discovery unavailable: '+error.message);
+      s.smartCoverage.braveIndex='error';s.smartIssues.push('Public web discovery unavailable: '+error.message);
     }
   }
   await fetchCase();
@@ -452,10 +455,11 @@ async function smartLaunch(form){
           body:{question,provider:'groq',brave_context:s.braveContext,web_search:false}});
       }catch(err){
         if(!s.braveContext)throw err;
-        s.smartIssues.push('Fresh Brave-to-Groq context failed: '+err.message+'; AI retried with saved evidence only.');
+        s.smartCoverage.braveContext='error';s.smartIssues.push('Fresh Brave-to-Groq context failed: '+err.message+'; AI retried with saved evidence only.');
         response=await api('/api/cases/'+started.id+'/chat',{method:'POST',
           body:{question,provider:'groq',brave_context:false,web_search:false}});
       }
+      s.smartCoverage.groq='ok';if(response.braveContextUsed)s.smartCoverage.braveContext=response.freshSourcesCount?'ok':'empty';
       s.sessionId=response.sessionId||null;
       s.messages.push({role:'assistant',text:response.answer,model:response.model,
         ids:response.evidenceIds||[],followUp:response.followUp||'',webSearch:!!response.webSearch,
@@ -463,7 +467,7 @@ async function smartLaunch(form){
         retrieval:response.retrieval||null});
       s.conversations=(await api('/api/cases/'+started.id+'/conversations')).items||[];
     }catch(err){
-      s.smartIssues.push('AI summary unavailable: '+err.message);
+      s.smartCoverage.groq='error';s.smartIssues.push('AI summary unavailable: '+err.message);
       s.messages.push({role:'assistant',text:'The AI answer is unavailable. Open the source records below and review each original. A search result alone does not identify a person.',model:'Source-only fallback'});
     }
   }else{
