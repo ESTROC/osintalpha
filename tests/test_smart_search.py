@@ -74,7 +74,7 @@ def test_ai_router_accepts_only_relevant_allowlisted_sources_and_literal_clues(m
     out=asyncio.run(smart_search.ai_route(q,fallback))
     assert out['aiPlanned']
     assert out['subject']=='Example Researcher'
-    assert out['providers']==['github','gdelt','openalex']
+    assert out['providers']==['github','gdelt']  # Academic source is irrelevant to this technical query
     assert out['context']['city']==''
     assert out['context']['organization']=='Indian Navy'
     assert out['context']['public_handle']==''
