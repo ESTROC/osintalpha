@@ -312,6 +312,9 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
         case=case_or_404(c,case_id,actor)
     providers=list(dict.fromkeys(body.providers))
     if len(providers)>8: raise HTTPException(422,'At most eight sources per run.')
+    from .research_authorization import require_scope_if_enabled
+    with db.connect() as scope_db:
+        require_scope_if_enabled(scope_db,case_id)
     allowed={s.id for s in CATALOG if case['subject_type'] in s.scope}
     if any(p not in allowed for p in providers): raise HTTPException(422,'Incompatible or unknown source selection.')
     async with httpx.AsyncClient(timeout=15, headers={'User-Agent':'OSINT AlphaIntelligenceWorkbench/1.0 (authorized research)'},follow_redirects=False) as client:
@@ -613,6 +616,9 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         response.update({'model':'Guided offline mode (rules, not AI)','provider':'local','remote':False})
         response['sessionId']=save_chat(case_id,actor,body,question,response,'local')
         return response
+    from .research_authorization import require_scope_if_enabled
+    with db.connect() as scope_db:
+        require_scope_if_enabled(scope_db,case_id)
     keyname='GROQ_API_KEY' if provider=='groq' else 'XAI_API_KEY'
     key=os.getenv(keyname,'').strip()
     if not key:
@@ -1158,6 +1164,10 @@ app.include_router(agency_operations_router)
 # Optional explicitly consented second-engine source-candidate check.
 from .cross_engine import router as cross_engine_router
 app.include_router(cross_engine_router)
+
+# Explicit, reviewable assignment scope and retention controls (not legal signoff).
+from .research_authorization import router as case_authorization_router
+app.include_router(case_authorization_router)
 
 # Case-scoped saved public-source search (not a worldwide independent index).
 from .local_index import router as local_index_router
