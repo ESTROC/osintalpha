@@ -331,6 +331,19 @@ CREATE TABLE IF NOT EXISTS case_signoffs (
  note TEXT NOT NULL, signed_at TEXT NOT NULL,
  review_digest TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS case_signoffs_case ON case_signoffs(case_id,signed_at);
+CREATE TABLE IF NOT EXISTS case_research_approvals (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ approved_by TEXT NOT NULL REFERENCES users(id),
+ purpose_snapshot TEXT NOT NULL,
+ specific_scope TEXT NOT NULL,
+ authorization_category TEXT NOT NULL,
+ approval_reference TEXT NOT NULL,
+ retention_days INTEGER NOT NULL,
+ approved_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS case_research_approvals_case
+ ON case_research_approvals(case_id,approved_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

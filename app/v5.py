@@ -93,13 +93,13 @@ class WebSearchInput(BaseModel):
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     consent:bool=False
 
-def make_queries(case,context,body):
+def make_queries(case,context,body,original_question=''):
     """Use a small, explainable profile-oriented query budget.
 
     Site filters improve discovery coverage, not identity certainty. We never
     claim that a LinkedIn search snippet is the underlying LinkedIn profile.
     """
-    base=' '.join((body.query or case['query']).strip().split())
+    base=' '.join((body.query or original_question or case['query']).strip().split())
     if not base:raise HTTPException(422,'Enter a public-source research query')
     org=' '.join(str(context.get('organization') or '').split())[:90]
     city=' '.join(str(context.get('city') or '').split())[:70]
@@ -142,12 +142,32 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
         case=core.case_or_404(conn,case_id,actor)
         ctx=conn.execute('SELECT city,organization,profession,public_handle FROM case_context WHERE case_id=?',
                          (case_id,)).fetchone()
+        saved_plan=conn.execute('SELECT original_question FROM case_search_plans WHERE case_id=?',
+                                (case_id,)).fetchone()
+    from .research_authorization import require_scope_if_enabled
+    with db.connect() as scope_db:
+        require_scope_if_enabled(scope_db,case_id)
     if not body.consent:
         raise HTTPException(422,'Explicit consent is required before sending research queries to Brave Web Search.')
     key=os.getenv('BRAVE_SEARCH_API_KEY','').strip()
     if not key:raise HTTPException(409,'Broad web discovery requires BRAVE_SEARCH_API_KEY in Render private environment. API collectors remain available.')
     context=dict(ctx) if ctx else {}
-    queries=make_queries(case,context,body)
+    original_question=str(saved_plan['original_question']) if saved_plan else case['query']
+    search_goal=(body.query or original_question).strip()
+    # P0-019: a single first name without a distinguishing public clue is too
+    # ambiguous for spending remote search quota or inferring an account.
+    if case['subject_type']=='person':
+        from .query_parse import parse_question
+        parsed=parse_question(search_goal)
+        if parsed.identity_state=='given_name_only' and not any(
+                str(context.get(k) or '').strip() for k in
+                ('city','organization','public_handle')):
+            raise HTTPException(422,
+                'A single given name is ambiguous. Add a full public name, '
+                'public handle or distinguishing organization/city.')
+    # P0-020: a user override is explicit; otherwise prefer the full original
+    # investigation question over a derived truncated case subject.
+    queries=make_queries(case,context,body,original_question)
     runid=core.uid()
     results=[]
     all_candidates=[]
@@ -222,7 +242,12 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             revised+=changed
         conn.execute('UPDATE cases SET last_collected=? WHERE id=?',(core.iso_now(),case_id))
     core.write_audit(actor['id'],'web_discovery','case',case_id,f'{len(queries)} queries, {new} saved')
-    return {'queries':[{'query':q,'status':s,'returned':len(items),'newlySaved':'See run history'} for q,s,m,items in results],
+    return {'originalQuestion':original_question,
+            'searchGoal':search_goal,
+            'queryOrigin':'analyst_override' if body.query else
+                          ('original_question' if saved_plan else 'legacy_case_subject'),
+            'originalQuestionPreserved':True,
+            'queries':[{'query':q,'status':s,'returned':len(items),'newlySaved':'See run history'} for q,s,m,items in results],
             'returned':sum(len(items) for q,s,m,items in results),'new':new,'changed':revised,
             'errors':sum(s=='error' for q,s,m,items in results),
             'publisherHosts':len({x['url'].split('/')[2] for q,s,m,items in results for x in items}),

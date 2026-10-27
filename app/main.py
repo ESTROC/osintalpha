@@ -266,6 +266,41 @@ def get_case(case_id:str, actor=Depends(actor_from_cookie)):
     return {'case':case,'context':dict(context) if context else {},'evidence':evidence,'runs':runs}
 
 
+@app.get('/api/cases/{case_id}/source-completeness')
+def source_completeness(case_id:str,actor=Depends(actor_from_cookie)):
+    """Source-run truthfulness; no inference that an unsearched subject is absent."""
+    from .source_completeness import summarize
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        runs=[dict(x) for x in conn.execute(
+            'SELECT provider,state,result_count,message,ran_at FROM collection_runs '
+            'WHERE case_id=? ORDER BY ran_at DESC LIMIT 500',(case_id,))]
+        evidence=[dict(x) for x in conn.execute(
+            'SELECT status FROM evidence WHERE case_id=?',(case_id,))]
+        plan=conn.execute('SELECT plan_json FROM case_search_plans WHERE case_id=?',(case_id,)).fetchone()
+    try:
+        expected=json.loads(plan['plan_json']).get('providers',[]) if plan else []
+    except (ValueError,TypeError):
+        expected=[]
+    return summarize(runs,evidence,expected)
+
+
+@app.get('/api/cases/{case_id}/provider-validation')
+def provider_validation(case_id:str,actor=Depends(actor_from_cookie)):
+    """Show recorded collector evidence, not pretend CI mocks are live probes."""
+    from .provider_validation import summarize_provider_evidence
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        queries=[dict(x) for x in conn.execute(
+           'SELECT provider,query_text,status,returned_count,created_at '
+           'FROM research_queries WHERE case_id=? ORDER BY created_at DESC LIMIT 300',
+           (case_id,))]
+        grounding=[dict(x) for x in conn.execute(
+           'SELECT provider,source_url,retrieved_at FROM research_grounding '
+           'WHERE case_id=? ORDER BY retrieved_at DESC LIMIT 300',(case_id,))]
+    return summarize_provider_evidence(queries,grounding)
+
+
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
@@ -293,6 +328,9 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
         case=case_or_404(c,case_id,actor)
     providers=list(dict.fromkeys(body.providers))
     if len(providers)>8: raise HTTPException(422,'At most eight sources per run.')
+    from .research_authorization import require_scope_if_enabled
+    with db.connect() as scope_db:
+        require_scope_if_enabled(scope_db,case_id)
     allowed={s.id for s in CATALOG if case['subject_type'] in s.scope}
     if any(p not in allowed for p in providers): raise HTTPException(422,'Incompatible or unknown source selection.')
     async with httpx.AsyncClient(timeout=15, headers={'User-Agent':'OSINT AlphaIntelligenceWorkbench/1.0 (authorized research)'},follow_redirects=False) as client:
@@ -594,6 +632,9 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         response.update({'model':'Guided offline mode (rules, not AI)','provider':'local','remote':False})
         response['sessionId']=save_chat(case_id,actor,body,question,response,'local')
         return response
+    from .research_authorization import require_scope_if_enabled
+    with db.connect() as scope_db:
+        require_scope_if_enabled(scope_db,case_id)
     keyname='GROQ_API_KEY' if provider=='groq' else 'XAI_API_KEY'
     key=os.getenv(keyname,'').strip()
     if not key:
@@ -630,13 +671,19 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 ''') ORDER BY fetched_at DESC LIMIT 8''',(case_id,*ids))
             passages=[{'evidenceId':x['evidence_id'],'url':x['source_url'],
               'sha256':x['content_sha256'],'unverifiedText':x['extracted_text'][:650]} for x in matches]
+    partitions=None
+    if ca['subject_type']=='person':
+        from .candidate_partition import load_candidate_partitions
+        with db.connect() as partition_db:
+            partitions=load_candidate_partitions(partition_db,case_id,records)
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
              'knownPublicClues':clues,'candidateHypotheses':groups,
              'analystSourceClaims':claims,'retrievalCoverage':retrieval,
-             'untrustedCapturedSourceText':passages,
+             'untrustedCapturedSourceText':passages if partitions is None else [],
              'freshUnverifiedBraveContext':live_brave['sources'] if body.brave_context else [],
-             'evidence':records,
+             'evidence':records if partitions is None else [],
+             'candidateEvidencePartitions':partitions,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
@@ -731,7 +778,30 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             # Persist *metadata and a one-way excerpt digest*, not copied web
             # page text. This is a review ledger, NOT quotation verification.
             with db.connect() as ground_db:
+                from .lineage import save_observation
+                from .v5 import public_https
+                persisted_leads=0
                 for source in live_brave['sources']:
+                    if not public_https(source.get('url','')):
+                        continue
+                    # P0-017: save source URL/title and an excerpt digest as a
+                    # reviewable candidate immediately. Do NOT retain indexed
+                    # snippet text without the explicit limited-text opt-in.
+                    metadata={'provider':'brave_llm_context',
+                        'sourceDate':source.get('sourceDate',''),
+                        'excerpt_sha256':hashlib.sha256(
+                            source['snippet'].encode()).hexdigest(),
+                        'page_fetched':False,'identity_verified':False,
+                        'excerpt_text_retained':False}
+                    outcome=save_observation(ground_db,case_id=case_id,
+                        run_id=response['sessionId'],
+                        query=live_brave.get('query',question)[:570],
+                        provider='brave_llm_context',
+                        source_ref=source['url'][:500],
+                        label=source['title'][:200],
+                        summary='Unverified indexed lead; page not captured. Excerpt content not retained.',
+                        url=source['url'],raw=metadata,actor_id=actor['id'])
+                    persisted_leads+=int(outcome in ('new','changed'))
                     grounding_id=uid()
                     ground_db.execute(
                         '''INSERT INTO research_grounding
@@ -755,6 +825,14 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                                 (uid(),grounding_id,case_id,source['url'],excerpt,
                                  hashlib.sha256(excerpt.encode()).hexdigest(),
                                  'explicit_case_analyst_opt_in','unverified_search_excerpt',iso_now()))
+                ground_db.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
+                    (uid(),case_id,'brave_llm_context','ok',persisted_leads,
+                     'Indexed leads saved as unverified case candidates; no page capture.',iso_now()))
+                ground_db.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                    (uid(),case_id,actor['id'],response['sessionId'],
+                     'brave_llm_context',live_brave.get('query',question)[:570],
+                     'ok',len(live_brave['sources']),persisted_leads,
+                     'Source metadata saved; excerpts not retained unless explicitly opted in.',iso_now()))
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search or body.brave_context),
                 'braveContextUsed':bool(body.brave_context),
@@ -1102,6 +1180,10 @@ app.include_router(agency_operations_router)
 # Optional explicitly consented second-engine source-candidate check.
 from .cross_engine import router as cross_engine_router
 app.include_router(cross_engine_router)
+
+# Explicit, reviewable assignment scope and retention controls (not legal signoff).
+from .research_authorization import router as case_authorization_router
+app.include_router(case_authorization_router)
 
 # Case-scoped saved public-source search (not a worldwide independent index).
 from .local_index import router as local_index_router
