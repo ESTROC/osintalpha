@@ -72,3 +72,62 @@ def list_excerpts(case_id:str,actor=Depends(core.actor_from_cookie)):
         del row['capture_sha']
         del row['latest_sha']
     return {'items':items,'note':'Only exact-match quotation with capture hash validation. Source authenticity, account ownership and factual truth are not verified.'}
+
+class ClaimPassageInput(BaseModel):
+    claim_id:str=Field(min_length=1,max_length=80)
+    excerpt_id:str=Field(min_length=1,max_length=80)
+
+@router.post('/api/cases/{case_id}/claim-passages',status_code=201)
+def link_claim_passage(case_id:str,body:ClaimPassageInput,actor=Depends(core.protect)):
+    """Exact quote evidence binding; not a truth, identity or entailment verdict."""
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        item=conn.execute(
+            '''SELECT cl.evidence_id,ex.quote_text,ex.capture_id,ex.content_sha256,
+               sc.extracted_text,sc.content_sha256 actual_sha,e.status
+               FROM claim_links cl
+               JOIN verified_excerpts ex ON ex.evidence_id=cl.evidence_id AND ex.case_id=cl.case_id
+               JOIN source_captures sc ON sc.id=ex.capture_id AND sc.case_id=ex.case_id
+               JOIN evidence e ON e.id=cl.evidence_id AND e.case_id=cl.case_id
+               WHERE cl.case_id=? AND cl.id=? AND ex.id=?''',
+            (case_id,body.claim_id,body.excerpt_id)).fetchone()
+        if not item:raise HTTPException(422,'Claim and exact quote must reference the same case source.')
+        if item['status']=='rejected':
+            raise HTTPException(422,'Rejected evidence cannot be used as proof.')
+        actual=hashlib.sha256(item['extracted_text'].encode('utf-8')).hexdigest()
+        if actual!=item['actual_sha'] or actual!=item['content_sha256']:
+            raise HTTPException(409,'The archived source passage changed.')
+        if not exact_span(item['extracted_text'],item['quote_text']):
+            raise HTTPException(409,'The purported quote is absent from the original capture.')
+        linkid=core.uid()
+        try:
+            conn.execute(
+                '''INSERT INTO claim_passage_proofs
+                    (id,case_id,claim_id,excerpt_id,evidence_id,link_status,reviewed_by,created_at)
+                   VALUES (?,?,?,?,?,?,?,?)''',
+                (linkid,case_id,body.claim_id,body.excerpt_id,item['evidence_id'],
+                 'text_match_only',actor['id'],core.iso_now()))
+        except Exception as exc:
+            # Unlike a new proof, a duplicate is not a new observation.
+            if 'unique' in str(exc).lower():
+                raise HTTPException(409,'This claim and passage have already been linked.') from exc
+            raise
+    core.write_audit(actor['id'],'claim_passage_match','case',case_id,linkid)
+    return {'id':linkid,'status':'text_match_only','supportsTruth':False,
+            'limitation':'Matching a quote to the stored original proves text presence only, not interpretation or identity.'}
+
+@router.get('/api/cases/{case_id}/claim-passages')
+def list_claim_passages(case_id:str,actor=Depends(core.actor_from_cookie)):
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        rows=conn.execute(
+            '''SELECT p.id,p.claim_id,p.evidence_id,p.link_status,
+                      p.created_at,c.claim_text,c.stance,e.source_url,
+                      x.quote_text,x.content_sha256
+               FROM claim_passage_proofs p
+               JOIN claim_links c ON c.id=p.claim_id AND c.case_id=p.case_id
+               JOIN evidence e ON e.id=p.evidence_id AND e.case_id=p.case_id
+               JOIN verified_excerpts x ON x.id=p.excerpt_id AND x.case_id=p.case_id
+               WHERE p.case_id=? ORDER BY p.created_at DESC LIMIT 200''',(case_id,))
+        return {'items':[dict(r) for r in rows],
+                'limitation':'A matched source passage is not an independently verified factual claim.'}
