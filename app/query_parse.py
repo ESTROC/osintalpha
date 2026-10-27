@@ -65,6 +65,8 @@ GENERIC = {
     'when', 'which', 'related', 'worked', 'working', 'works', 'work', 'was',
     'were', 'be', 'any', 'all', 'please', 'show', 'named', 'search', 'find',
     'tell', 'me', 'his', 'her', 'their', 'has', 'have', 'had', 'participation',
+    'city', 'government', 'municipal', 'locality', 'announcement', 'guidance',
+    'update', 'document', 'publication', 'policy', 'publicly',
 }
 LEXICON = TOPICS | ROLES | ORG_HEADS | ORG_SUFFIX | NATIONALITY | PREPS_ORG | PREPS_PLACE \
     | PREP_EITHER | GENERIC | {'air', 'force'}
