@@ -256,6 +256,47 @@ CREATE TABLE IF NOT EXISTS verified_excerpts(
 );
 CREATE INDEX IF NOT EXISTS verified_excerpts_case ON verified_excerpts(case_id,created_at);
 
+CREATE TABLE IF NOT EXISTS claim_passage_proofs (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL REFERENCES claim_links(id) ON DELETE CASCADE,
+ excerpt_id TEXT NOT NULL REFERENCES verified_excerpts(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ link_status TEXT NOT NULL DEFAULT 'text_match_only',
+ reviewed_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,
+ UNIQUE(case_id,claim_id,excerpt_id)
+);
+CREATE INDEX IF NOT EXISTS claim_passage_proofs_case ON claim_passage_proofs(case_id,created_at);
+CREATE TABLE IF NOT EXISTS case_search_plans (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ original_question TEXT NOT NULL, plan_json TEXT NOT NULL,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_grounding (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ session_id TEXT REFERENCES research_sessions(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL, query_text TEXT NOT NULL,
+ source_url TEXT NOT NULL, source_title TEXT NOT NULL,
+ published_at TEXT NOT NULL DEFAULT '',
+ excerpt_sha256 TEXT NOT NULL, retrieved_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_grounding_case
+ ON research_grounding(case_id,retrieved_at);
+CREATE TABLE IF NOT EXISTS research_excerpt_samples(
+ id TEXT PRIMARY KEY,
+ grounding_id TEXT NOT NULL REFERENCES research_grounding(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ source_url TEXT NOT NULL,
+ excerpt_text TEXT NOT NULL,
+ excerpt_sha256 TEXT NOT NULL,
+ retention_basis TEXT NOT NULL,
+ review_state TEXT NOT NULL DEFAULT 'unverified_search_excerpt',
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_excerpt_samples_case ON research_excerpt_samples(case_id,created_at);
+
 CREATE TABLE IF NOT EXISTS case_assessments(
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',
