@@ -351,31 +351,54 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
 async function loadResearchState(){
- const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity,tasks,assignees,members,duplicates,quality]=await Promise.all([
+ // The initial case view needs only overview, conversation and provider state.
+ // Specialist modules are fetched when explicitly selected.
+ const [tr,conv,researchPlan,runs,intel,webProviders,candidates]=await Promise.all([
    api('/api/cases/'+s.id+'/triage'),
    api('/api/cases/'+s.id+'/conversations'),
-   api('/api/cases/'+s.id+'/search-history'),
    api('/api/cases/'+s.id+'/research-plan?depth='+s.depth),
    api('/api/cases/'+s.id+'/research-history'),
-   api('/api/cases/'+s.id+'/candidates'),
    api('/api/cases/'+s.id+'/intelligence'),
    api('/api/research/providers'),
-   api('/api/cases/'+s.id+'/changes'),
-   api('/api/cases/'+s.id+'/jobs'),
-   api('/api/cases/'+s.id+'/excerpts'),
-   api('/api/cases/'+s.id+'/identity-analysis'),
-   api('/api/cases/'+s.id+'/tasks'),
-   api('/api/cases/'+s.id+'/task-assignees'),
-   api('/api/cases/'+s.id+'/members'),
-   api('/api/cases/'+s.id+'/duplicate-sources'),
-   api('/api/cases/'+s.id+'/identity-quality')
+   api('/api/cases/'+s.id+'/candidates')
  ]);
- s.triage=tr;s.conversations=conv.items||[];s.searchHistory=history.items||[];
- s.researchPlan=researchPlan;s.researchRuns=runs.items||[];s.candidates=candidates.items||[];s.intel=intel;s.webProviders=webProviders;s.changes=changes;s.jobs=jobs.items||[];s.excerpts=excerpts.items||[];s.identity=identity;s.tasks=tasks.items||[];s.taskTotal=tasks.total||0;s.taskAssignees=assignees.items||[];s.members=members;s.duplicateSources=duplicates;s.identityQuality=quality;
- if(s.job?.id)s.job=await api('/api/cases/'+s.id+'/jobs/'+s.job.id);
+ s.triage=tr;s.conversations=conv.items||[];s.researchPlan=researchPlan;
+ s.researchRuns=runs.items||[];s.intel=intel;s.webProviders=webProviders;s.candidates=candidates.items||[];
  if(s.conversations.length)await loadConversation(s.conversations[0].id);
+}
+async function loadAdvancedCaseState(tab){
+ const id=s.id;
+ // No speculative cross-case cache: data is read only for the authorized case.
+ if(tab==='portfolio'){s.portfolio=await api('/api/cases/'+id+'/public-portfolio');return}
+ const endpoint={
+  investigate:['jobs'],
+  tasks:['tasks','task-assignees'],
+  team:['members','task-assignees'],
+  candidates:['candidates','identity-analysis','identity-quality'],
+  evidence:['duplicate-sources','excerpts'],
+  findings:['intelligence','excerpts','candidates'],
+  reports:['intelligence','candidates'],
+  activity:['search-history','changes','research-history'],
+ }[tab]||[];
+ const result=await Promise.all(endpoint.map(name=>api('/api/cases/'+id+'/'+name)));
+ endpoint.forEach((name,i)=>{
+  const value=result[i];
+  if(name==='jobs')s.jobs=value.items||[];
+  else if(name==='tasks'){s.tasks=value.items||[];s.taskTotal=value.total||0}
+  else if(name==='task-assignees')s.taskAssignees=value.items||[];
+  else if(name==='members')s.members=value;
+  else if(name==='candidates')s.candidates=value.items||[];
+  else if(name==='identity-analysis')s.identity=value;
+  else if(name==='identity-quality')s.identityQuality=value;
+  else if(name==='duplicate-sources')s.duplicateSources=value;
+  else if(name==='excerpts')s.excerpts=value.items||[];
+  else if(name==='intelligence')s.intel=value;
+  else if(name==='search-history')s.searchHistory=value.items||[];
+  else if(name==='changes')s.changes=value;
+  else if(name==='research-history')s.researchRuns=value.items||[];
+ });
 }
 async function loadConversation(id){
  const result=await api('/api/cases/'+s.id+'/conversations/'+id);
@@ -489,7 +512,7 @@ async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.se
 document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search]');if(!t)return;try{
 if(t.dataset.nav){s.where=t.dataset.nav;render();if(s.where==='world'&&s.geoStatus==='idle')await loadGeo()}
 else if(t.dataset.mode){s.mode=t.dataset.mode;s.where='home';render();document.getElementById('query')?.focus()}
-else if(t.dataset.tab){s.tab=t.dataset.tab;if(s.tab==='portfolio')s.portfolio=await api('/api/cases/'+s.id+'/public-portfolio');render()}
+else if(t.dataset.tab){s.tab=t.dataset.tab;await loadAdvancedCaseState(s.tab);render()}
 else if(t.hasAttribute('data-profile-search')){
  if(!s.webProviders?.web?.configured)throw Error('Set BRAVE_SEARCH_API_KEY privately in Render before searching professional public web.');
  if(typeof window.confirm==='function'&&!window.confirm('Send this case subject and public context clues to Brave Search (up to four searches)? Results will be saved as unverified leads.'))return;
