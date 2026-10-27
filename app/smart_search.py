@@ -58,7 +58,7 @@ def looks_name(query):
         'student','plumber','electrician','business','company','school','shop'
     }:
         return ''
-    return candidate[:160]
+    return candidate[:160] if len(tokens)>1 else ''
 
 
 def deterministic_route(question, explicit_type=None):
@@ -77,13 +77,9 @@ def deterministic_route(question, explicit_type=None):
     else:
         kind = 'person'  # Tentative storage category; not an identification.
     subject = q if kind in ('domain', 'ip') else (looks_name(q) or q)[:160]
+    # Do not turn example words or topics into assertions about this subject.
+    # Clues are supplied by the analyst or copied literally by the opt-in planner.
     ctx = {'city':'','organization':'','profession':'','public_handle':''}
-    if 'indian navy' in lower:
-        ctx['organization']='Indian Navy'
-    if re.search(r'\bcyber\s*security\b|\bcybersecurity\b',lower):
-        ctx['profession']='cybersecurity'
-    if 'university' in lower or 'research' in lower:
-        ctx['profession']=ctx['profession'] or 'research'
     if kind == 'domain':
         providers=['dns']
     elif kind=='ip':
@@ -93,7 +89,7 @@ def deterministic_route(question, explicit_type=None):
     elif re.search(r'\b(research|professor|academic|publication|scholar|scientist|orcid)\b', lower):
         providers=['openalex','crossref']
     elif re.search(r'\b(cyber|software|programming|github|engineer|developer|code)\b', lower):
-        providers=['github','gdelt'] if len(subject.split())>=2 else ['github']
+        providers=['github','gdelt'] if len(subject.split())>=2 and subject.casefold()!=q.casefold() else []
     elif len(subject.split())>=2 and subject.casefold()!=q.casefold():
         providers=['gdelt','wikipedia']
     else:
