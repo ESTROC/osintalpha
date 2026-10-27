@@ -197,7 +197,10 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
         provided=words(getattr(body,key,''))
         if provided:
             plan['context'][key]=provided
-    title=('Investigation · '+question)[:140]
+    # Scannable name: tentative subject, limited objective and UTC date.
+    stamp=datetime.now(timezone.utc).date().isoformat()
+    label=(plan['subject'] or 'Public source review')[:48]
+    title=(label+' · '+question[:56]+' · '+stamp)[:140]
     values=core.CaseInput(
         title=title,subject_type=plan['subjectType'],query=plan['subject'],
         purpose=body.purpose.strip(),authority_confirmed=True,
