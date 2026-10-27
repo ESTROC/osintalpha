@@ -12,7 +12,7 @@ def test_search_requires_explicit_purpose_and_authorization(client, auth):
     response=client.post(endpoint,headers=auth,json=base)
     assert response.status_code==422
     denied=client.post(endpoint,json={**base,'authority_confirmed':True})
-    assert denied.status_code==401
+    assert denied.status_code==403  # Missing required same-origin action header
     ok=client.post(endpoint,headers=auth,json={**base,'authority_confirmed':True})
     assert ok.status_code==201,ok.text
     result=ok.json()
