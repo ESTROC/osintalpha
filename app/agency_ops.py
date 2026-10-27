@@ -231,7 +231,7 @@ def signoffs(case_id:str,actor=Depends(core.actor_from_cookie)):
     for x in rows:x['stillCurrent']=x['review_digest']==current
     return {'items':rows}
 
-@router.get('/api/cases/compare')
+@router.get('/api/agency/compare-cases')
 def compare_cases(left:str,right:str,actor=Depends(core.actor_from_cookie)):
     if left==right:raise HTTPException(422,'Choose two distinct authorized investigations.')
     with db.connect() as c:
