@@ -33,6 +33,8 @@ def make_system_prompt(web_search=False,brave_context=False):
       'distinguishing detail: city, employer, public username or official profile link. '
       'If a distinguishing clue is supplied in chat, use it to compare recorded candidates. '
       'Do not claim to have searched sources beyond provided runs or the explicitly enabled browser tool. '
+      'Candidate evidence partitions must be reviewed independently; unassigned and cross-linked '
+      'sources may NOT be used to bridge or automatically unify two person hypotheses. '
       'Publication authors can be unrelated namesakes; two authors with partial name matches '
       'are not automatically the named subject. '
       'A candidate record is NOT an identity match, affiliation verification or risk finding. '

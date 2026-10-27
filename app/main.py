@@ -649,13 +649,19 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 ''') ORDER BY fetched_at DESC LIMIT 8''',(case_id,*ids))
             passages=[{'evidenceId':x['evidence_id'],'url':x['source_url'],
               'sha256':x['content_sha256'],'unverifiedText':x['extracted_text'][:650]} for x in matches]
+    partitions=None
+    if ca['subject_type']=='person':
+        from .candidate_partition import load_candidate_partitions
+        with db.connect() as partition_db:
+            partitions=load_candidate_partitions(partition_db,case_id,records)
     context={'caseTitle':ca['title'],'subject':ca['query'],
              'subjectType':ca['subject_type'],'originalPurpose':ca['purpose'],
              'knownPublicClues':clues,'candidateHypotheses':groups,
              'analystSourceClaims':claims,'retrievalCoverage':retrieval,
-             'untrustedCapturedSourceText':passages,
+             'untrustedCapturedSourceText':passages if partitions is None else [],
              'freshUnverifiedBraveContext':live_brave['sources'] if body.brave_context else [],
-             'evidence':records,
+             'evidence':records if partitions is None else [],
+             'candidateEvidencePartitions':partitions,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
