@@ -186,12 +186,9 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     plan=deterministic_route(question,body.subject_type)
     if body.ai_opt_in:
         plan=await ai_route(question,plan)
-    # A first name is not a unique public identity. Do not spend external
-    # model/search quota until an independent discriminating clue is entered.
-    if (plan['subjectType']=='person' and
-        plan.get('parsed',{}).get('identity_state')=='given_name_only' and
-        not (body.public_handle.strip() or body.organization.strip() or body.city.strip())):
-        raise HTTPException(422,'Clarification required: provide a full name, an official public profile/handle, or a known public organization or city before searching a person by given name alone.')
+    # Do not falsely reject public event/business questions that a heuristic
+    # parser mistakes for names. Keep the advisory clarification state instead;
+    # the default UI uses it to stop automatic paid searches for a person.
     # User-provided context overrides *inferred* text, but remains only clues.
     for key in ('city','organization','profession','public_handle'):
         provided=words(getattr(body,key,''))
