@@ -529,6 +529,7 @@ class ChatMessage(BaseModel):
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
     brave_context:bool=False
+    save_bounded_excerpts:bool=False
     freshness:Literal['all','pd','pw','pm','py']='all'
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
@@ -567,6 +568,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     provider=body.provider or ('grok' if body.use_grok else 'local')
     if (body.web_search or body.brave_context) and provider!='groq':
         raise HTTPException(422,'Live public-web research requires GroqCloud and explicit provider selection.')
+    if body.save_bounded_excerpts and not body.brave_context:
+        raise HTTPException(422,'Bounded search excerpts can only be saved with explicit Brave context retrieval.')
     if body.brave_context and body.web_search:
         raise HTTPException(422,'Choose Brave contextual retrieval or Groq browser search for this request, not both.')
     records=chat_evidence(ev)
@@ -729,15 +732,29 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             # page text. This is a review ledger, NOT quotation verification.
             with db.connect() as ground_db:
                 for source in live_brave['sources']:
+                    grounding_id=uid()
                     ground_db.execute(
                         '''INSERT INTO research_grounding
                         (id,case_id,session_id,provider,query_text,source_url,
                          source_title,published_at,excerpt_sha256,retrieved_at)
                         VALUES (?,?,?,?,?,?,?,?,?,?)''',
-                        (uid(),case_id,response['sessionId'],'brave_llm_context',
+                        (grounding_id,case_id,response['sessionId'],'brave_llm_context',
                          live_brave.get('query',question)[:570],source['url'][:600],
                          source['title'][:200],source.get('sourceDate','')[:80],
                          hashlib.sha256(source['snippet'].encode()).hexdigest(),iso_now()))
+                    if body.save_bounded_excerpts:
+                        # Maximum 160 visible characters. A public search-index
+                        # excerpt is not a saved page or independent fact.
+                        excerpt=' '.join(source['snippet'].split())[:160]
+                        if excerpt:
+                            ground_db.execute(
+                                '''INSERT INTO research_excerpt_samples
+                                   (id,grounding_id,case_id,source_url,excerpt_text,
+                                    excerpt_sha256,retention_basis,review_state,created_at)
+                                   VALUES (?,?,?,?,?,?,?,?,?)''',
+                                (uid(),grounding_id,case_id,source['url'],excerpt,
+                                 hashlib.sha256(excerpt.encode()).hexdigest(),
+                                 'explicit_case_analyst_opt_in','unverified_search_excerpt',iso_now()))
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search or body.brave_context),
                 'braveContextUsed':bool(body.brave_context),
@@ -943,6 +960,18 @@ def case_source_grounding(case_id:str,actor=Depends(actor_from_cookie)):
                ORDER BY retrieved_at DESC LIMIT 200''',(case_id,))
         return {'items':[dict(x) for x in rows],
                 'notice':'Indexed excerpts are unverified, source pages and identity not validated. Digests do not prove factual claims.'}
+
+
+@app.get('/api/cases/{case_id}/research-excerpts')
+def research_excerpt_samples(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        entries=conn.execute(
+            '''SELECT id,source_url,excerpt_text,excerpt_sha256,retention_basis,
+                      review_state,created_at FROM research_excerpt_samples
+               WHERE case_id=? ORDER BY created_at DESC LIMIT 80''',(case_id,))
+        return {'items':[dict(row) for row in entries],
+                'notice':'Analyst-opted-in limited index snippets; not publisher captures or verified facts.'}
 
 
 @app.get('/api/cases/{case_id}/conversations')
