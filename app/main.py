@@ -457,52 +457,36 @@ def safe_href(raw):
 
 
 def report_research_appendix(case_id):
-    """Show saved AI context as an explicitly unreviewed appendix, never fact."""
+    """Same saved snapshot supplies report HTML/PDF and JSON."""
+    from .report_continuity import latest_snapshot
     with db.connect() as conn:
-        result=conn.execute(
-            '''SELECT m.content,m.provider,m.web_leads_json,m.created_at
-            FROM research_messages m
-            JOIN research_sessions t ON t.id=m.session_id
-            WHERE t.case_id=? AND m.role='assistant'
-            ORDER BY m.created_at DESC,m.message_index DESC LIMIT 1''',
-            (case_id,)).fetchone()
+        result=latest_snapshot(conn,case_id)
         plan=conn.execute(
-            'SELECT original_question FROM case_search_plans WHERE case_id=?',
-            (case_id,)).fetchone()
-    if not result and not plan:
-        return ''
+           'SELECT original_question FROM case_search_plans WHERE case_id=?',
+           (case_id,)).fetchone()
+    if not result and not plan:return ''
     esc=html.escape
     parts=['<h2>Search question and model output (not analyst findings)</h2>']
-    if plan:
-        parts.append('<p><b>Original question:</b> '+esc(plan['original_question'])+'</p>')
+    if plan:parts.append('<p><b>Original question:</b> '+esc(plan['original_question'])+'</p>')
     if result:
-        parts.append('<div class="warn"><b>UNVERIFIED AI SYNTHESIS.</b> The text below is saved research dialogue, '
-                     'not an approved factual assessment. All identity or allegation claims '
-                     'require independently reviewed source passages.</div>')
-        parts.append('<p><b>Model/mode:</b> '+esc(result['provider'])+
-                     ' • '+esc(result['created_at'])+'</p>')
-        parts.append('<p>'+esc(result['content'][:5000]).replace('\\n','<br>')+'</p>')
-        try:
-            leads=json.loads(result['web_leads_json'])
-        except (ValueError,TypeError):
-            leads=[]
-        if isinstance(leads,list):
-            distinct=set()
-            links=[]
-            for row in leads[:15]:
-                if not isinstance(row,dict):
-                    continue
-                src=safe_href(str(row.get('url') or ''))
-                if not src.startswith('https://') or src in distinct:
-                    continue
-                distinct.add(src)
-                links.append('<li><a href="'+esc(src,quote=True)+'">'+
-                             esc(str(row.get('title') or src)[:200])+'</a></li>')
-            if links:
-                parts.append('<p>Original candidate web leads (unverified):</p><ul>'+
-                             ''.join(links)+'</ul>')
+        parts.append('<div class="warn"><b>UNVERIFIED AI SYNTHESIS.</b> This '
+             'is not an approved factual assessment. Independently inspect original sources.</div>')
+        parts.append('<p><b>Model/mode:</b> '+esc(result.get('provider',''))+
+                     ' • '+esc(result.get('createdAt',''))+'</p>')
+        parts.append('<p>'+esc(result.get('answer','')[:5000]).replace('\\n','<br>')+'</p>')
+        parts.append('<p><b>Citation snapshot version:</b> '+str(result.get('snapshotVersion',0))+'</p>')
+        if result.get('snapshotIntegrityOk') is False:
+            parts.append('<div class="warn">Integrity check FAILED. Do not rely on citation snapshot.</div>')
+        links=[]
+        for row in result.get('webLeads',[])[:15]+result.get('evidence',[])[:15]:
+            if not isinstance(row,dict):continue
+            url=safe_href(str(row.get('url') or row.get('source_url') or ''))
+            if url.startswith('https://'):
+                links.append('<li><a href="'+esc(url,quote=True)+'">'+
+                    esc(str(row.get('title') or row.get('label') or url)[:200])+'</a></li>')
+        if links:parts.append('<p>Saved candidate citations (unverified):</p><ul>'+
+                            ''.join(links)+'</ul>')
     return ''.join(parts)
-
 
 def build_html_report(case,evidence,runs):
     esc=html.escape
@@ -554,7 +538,12 @@ def report_json(case_id:str,actor=Depends(actor_from_cookie)):
     ca,ev,runs=load_report(case_id,actor)
     for e in ev: e.pop('raw_json',None)
     write_audit(actor['id'],'export','case',case_id,'JSON report')
-    return {'case':ca,'evidence':ev,'runs':runs,'generatedAt':iso_now(),'disclaimer':'Candidate public records require independent identity and fact verification.'}
+    from .report_continuity import latest_snapshot
+    with db.connect() as conn:
+        research=latest_snapshot(conn,case_id)
+    return {'case':ca,'evidence':ev,'runs':runs,'research':research,
+            'generatedAt':iso_now(),
+            'disclaimer':'Candidate public records require independent identity and fact verification.'}
 
 
 class ChatTurn(BaseModel):
@@ -1030,10 +1019,15 @@ def save_chat(case_id,actor,body,question,response,provider):
         position=c.execute('SELECT COALESCE(MAX(message_index),0) n FROM research_messages WHERE session_id=?',(session,)).fetchone()['n']
         for role,value in (('user',question),('assistant',response['answer'])):
             position+=1
+            message_id=uid()
+            stamp=iso_now()
             c.execute('INSERT INTO research_messages(id,session_id,role,content,provider,evidence_ids_json,web_leads_json,created_at,message_index) VALUES (?,?,?,?,?,?,?,?,?)',
-                (uid(),session,role,value,provider,
+                (message_id,session,role,value,provider,
                  json.dumps(response.get('evidenceIds',[]) if role=='assistant' else []),
-                 json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now(),position))
+                 json.dumps(response.get('webLeads',[]) if role=='assistant' else []),stamp,position))
+            if role=='assistant':
+                from .report_continuity import make_snapshot
+                make_snapshot(c,case_id,message_id,session,question,response,provider,stamp)
         c.execute('UPDATE research_sessions SET updated_at=? WHERE id=?',(iso_now(),session))
         return session
 
