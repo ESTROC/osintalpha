@@ -226,13 +226,31 @@ async def execute_provider(case,job,choice,actor_id,step_no):
     return {'status':'ok' if records else 'empty','returned':len(records),
             'new':new,'changed':changed,'message':''}
 
+@router.post('/api/cases/{case_id}/jobs/{job_id}/cancel')
+def cancel_job(case_id:str,job_id:str,actor=Depends(core.protect)):
+    """Cooperative cancellation: in-flight HTTP may finish, but no next step."""
+    case,job,steps=read_job(case_id,job_id,actor)
+    if job['status']=='cancelled':
+        return hydrate(case,job,steps)
+    if job['status']=='completed':
+        raise HTTPException(409,'Completed job cannot be cancelled.')
+    with db.connect() as conn:
+        target='cancel_requested' if job['status']=='running' else 'cancelled'
+        count=conn.execute(
+            "UPDATE research_jobs SET status=?,updated_at=? WHERE id=? AND status=?",
+            (target,core.iso_now(),job_id,job['status'])).rowcount
+        if not count:raise HTTPException(409,'Job status changed; refresh first.')
+    core.write_audit(actor['id'],'job_cancel','case',case_id,target)
+    return job_detail(case_id,job_id,actor)
+
+
 @router.post('/api/cases/{case_id}/jobs/{job_id}/step')
 async def run_step(case_id:str,job_id:str,actor=Depends(core.protect)):
     case,job,previous=read_job(case_id,job_id,actor)
     if job['status']=='completed':
         return hydrate(case,job,previous)
     if job['status']!='ready':
-        raise HTTPException(409,'Job is already running or requires explicit recovery.')
+        raise HTTPException(409,'Job is already running, cancelled or requires explicit recovery.')
     number=job['completed_steps']+1
     if number>job['max_steps']:
         with db.connect() as c:
@@ -263,8 +281,12 @@ async def run_step(case_id:str,job_id:str,actor=Depends(core.protect)):
             report={'status':'error','returned':0,'new':0,'changed':0,
                     'message':'Provider unavailable: '+type(exc).__name__}
         finished=core.iso_now()
-        next_state='completed' if number>=job['max_steps'] else 'ready'
+        next_state=('failed' if report['status'] not in ('ok','empty') else
+                    'completed' if number>=job['max_steps'] else 'ready')
         with db.connect() as c:
+            current=c.execute('SELECT status FROM research_jobs WHERE id=?',(job_id,)).fetchone()
+            if current and current['status']=='cancel_requested':
+                next_state='cancelled'
             c.execute('''UPDATE research_job_steps SET status=?,returned_count=?,new_count=?,
                       changed_count=?,error_message=?,finished_at=? WHERE id=?''',
                   (report['status'],report['returned'],report['new'],report['changed'],
@@ -284,7 +306,7 @@ async def run_step(case_id:str,job_id:str,actor=Depends(core.protect)):
 def recover_job(case_id:str,job_id:str,actor=Depends(core.protect)):
     case,job,steps=read_job(case_id,job_id,actor)
     if job['status'] not in ('failed','running'):
-        raise HTTPException(409,'Only failed or interrupted research may be recovered.')
+        raise HTTPException(409,'Only failed or interrupted research may be recovered. Cancelled jobs are final.')
     if job['status']=='running':
         try:updated=datetime.fromisoformat(job['updated_at'])
         except ValueError:updated=datetime.now(timezone.utc)
@@ -330,7 +352,7 @@ async def run_bounded(case_id:str,job_id:str,body:BoundedRun,
         step=result['steps'][-1]
         executed.append(step)
         # Continuing after provider failure can waste quota or hide outages.
-        if step['status'] not in ('ok','empty'):
+        if step['status'] not in ('ok','empty') or result['status']!='ready':
             break
     return {'job':result,'executedSteps':executed,
             'complete':result['status']=='completed',
