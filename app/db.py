@@ -256,6 +256,18 @@ CREATE TABLE IF NOT EXISTS verified_excerpts(
 );
 CREATE INDEX IF NOT EXISTS verified_excerpts_case ON verified_excerpts(case_id,created_at);
 
+CREATE TABLE IF NOT EXISTS claim_passage_proofs (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL REFERENCES claim_links(id) ON DELETE CASCADE,
+ excerpt_id TEXT NOT NULL REFERENCES verified_excerpts(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ link_status TEXT NOT NULL DEFAULT 'text_match_only',
+ reviewed_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL,
+ UNIQUE(case_id,claim_id,excerpt_id)
+);
+CREATE INDEX IF NOT EXISTS claim_passage_proofs_case ON claim_passage_proofs(case_id,created_at);
 CREATE TABLE IF NOT EXISTS case_search_plans (
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  original_question TEXT NOT NULL, plan_json TEXT NOT NULL,
