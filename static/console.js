@@ -466,6 +466,19 @@ async function smartLaunch(form){
   const providerInfo=await api('/api/research/providers');
   s.webProviders=providerInfo;
   await Promise.all([fetchCase(),refreshCases()]);
+  if(started.plan?.deferExternalSearch){
+    const prompt=started.plan.clarification||'Provide an identifying public clue before searching a single given name.';
+    s.smartStage='Clarification required before external research';
+    s.smartIssues.push(prompt);
+    s.smartCoverage.structured='skipped';
+    s.smartCoverage.braveIndex='skipped';
+    s.smartCoverage.braveContext='skipped';
+    s.smartCoverage.groq='skipped';
+    s.messages=[{role:'user',text:question},{role:'assistant',text:prompt+
+      ' This is a search-target clarification, not proof of identity.',model:'Source planner'}];
+    s.provider='local';
+    return;
+  }
   const providers=started.plan.providers||[];
   if(providers.length){
     s.smartStage='Checking '+providers.join(', ')+' public sources';render();
@@ -482,8 +495,10 @@ async function smartLaunch(form){
     s.smartStage='Retrieving attributable results from Brave Search';render();
     try{
       const indexed=await api('/api/cases/'+started.id+'/web-discovery',{
-        method:'POST',body:{query:webQuestion,depth:1,lens:'general',consent:true,freshness,country,search_lang}});
+        method:'POST',body:{query:webQuestion,depth:3,pages:2,adaptive:true,lens:started.plan.searchLens||'general',consent:true,freshness,country,search_lang}});
       s.smartCoverage.braveIndex=indexed.errors?'partial':indexed.returned?'ok':'empty';
+      s.smartCoverage.braveScope=indexed.stopReason||'unknown';
+      s.smartCoverage.braveQueries=indexed.executedQueries||0;
       if(indexed.errors)s.smartIssues.push('Brave web discovery reported '+indexed.errors+' provider error(s).');
     }catch(error){
       s.smartCoverage.braveIndex='error';s.smartIssues.push('Public web discovery unavailable: '+error.message);
