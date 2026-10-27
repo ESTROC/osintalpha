@@ -85,18 +85,28 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
     if not key:
         raise HTTPException(409, 'BRAVE_SEARCH_API_KEY is not configured on Render.')
     query = composed_query(case, question, clues)
+    # Local recall is a business/service search aid, NOT subject-location inference.
+    # Only send the city if the analyst explicitly provided the public city and
+    # the question asks about publicly listed businesses or service providers.
+    city=str(clues.get('city') or '').strip()
+    business_intent=bool(re.search(
+        r'\b(plumb(?:er|ing)|electrician|contractor|shop|repair|service provider|restaurant|local business|business listing)\b',
+        question,re.I))
+    local_recall=bool(city and business_intent)
+    location_headers=({'X-Loc-City':city[:80],'X-Loc-Country':country}
+                      if local_recall else {})
     own_client = client is None
     if own_client:
         client = httpx.AsyncClient(timeout=14, follow_redirects=False, trust_env=False)
     try:
         response = await client.post(
             'https://api.search.brave.com/res/v1/llm/context',
-            headers={'X-Subscription-Token': key, 'Accept': 'application/json'},
+            headers={'X-Subscription-Token': key, 'Accept': 'application/json',**location_headers},
             json={
                 'q': query, 'count': 12, 'maximum_number_of_urls': 8,
                 'maximum_number_of_tokens': 4600, 'maximum_number_of_snippets': 20,
                 'context_threshold_mode': 'balanced', 'enable_source_metadata': True,
-                'safesearch': 'strict', 'enable_local': False,
+                'safesearch': 'strict', 'enable_local': local_recall,
                 'country':country,'search_lang':search_lang,
                 **({'freshness':freshness} if freshness!='all' else {}),
             })
@@ -118,7 +128,7 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
     return {
         'sources': parse_context(payload), 'provider': 'Brave LLM Context',
         'query': query, 'searchedNow': True,'freshness':freshness,
-        'jurisdiction':country,'language':search_lang,
+        'jurisdiction':country,'language':search_lang,'localRecall':local_recall,
         'notice': ('These are search-index excerpts from attributed URLs. '
                    'They are not independently verified source-page captures, '
                    'identity matches, live whereabouts, or confirmed claims.')
