@@ -285,6 +285,22 @@ def source_completeness(case_id:str,actor=Depends(actor_from_cookie)):
     return summarize(runs,evidence,expected)
 
 
+@app.get('/api/cases/{case_id}/provider-validation')
+def provider_validation(case_id:str,actor=Depends(actor_from_cookie)):
+    """Show recorded collector evidence, not pretend CI mocks are live probes."""
+    from .provider_validation import summarize_provider_evidence
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        queries=[dict(x) for x in conn.execute(
+           'SELECT provider,query_text,status,returned_count,created_at '
+           'FROM research_queries WHERE case_id=? ORDER BY created_at DESC LIMIT 300',
+           (case_id,))]
+        grounding=[dict(x) for x in conn.execute(
+           'SELECT provider,source_url,retrieved_at FROM research_grounding '
+           'WHERE case_id=? ORDER BY retrieved_at DESC LIMIT 300',(case_id,))]
+    return summarize_provider_evidence(queries,grounding)
+
+
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
