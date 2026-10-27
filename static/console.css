@@ -118,3 +118,9 @@ blockquote{margin:10px 0;border-left:2px solid var(--accent);padding:7px 12px;co
 .smart-source strong{font-size:12px}.smart-source p{font-size:10px;color:#9facc2;margin:5px 0 0}
 .smart-source .text-link{font-size:11px;white-space:nowrap}
 @media(max-width:750px){.smart-hero{padding:22px 18px}.smart-hero .search-box{flex-direction:column}.smart-hero .search-box input,.smart-hero .search-box button{width:100%}.smart-source{align-items:flex-start;flex-direction:column}}
+
+/* V8: source camera metadata, deliberate publisher still preview */
+.camera-still{margin:10px 0;padding:9px;border:1px solid #394761;background:#09111f;border-radius:9px}
+.camera-still img{display:block;width:100%;max-height:330px;object-fit:contain;background:#080d16;border-radius:5px}
+.camera-still figcaption{font-size:11px;line-height:1.5;color:#a2b1cb;padding-top:7px}
+.agency-tools-shortcut{font-size:12px}
