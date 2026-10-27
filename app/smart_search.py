@@ -17,9 +17,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import main as core
+from . import db
 from .brave_context import BLOCKED_LIVE_TRACKING
 from .connectors import CATALOG, valid_domain, valid_public_ip
 from .search_policy import plan_question,permitted_sources,question_type
+from .query_parse import parse_question
 
 router = APIRouter()
 
@@ -40,27 +42,25 @@ def words(question):
 
 
 def looks_name(query):
-    """Best-effort initial subject extraction; never a verified identity."""
-    text = re.sub(r'^(?:who is|who was|find|search for|research|tell me about)\s+', '',
-                  words(query), flags=re.I)
-    # Treat these terms as contextual topics, not parts of a person's name.
-    boundary = re.search(
-        r'\s+(?:cyber|security|army|navy|air\s+force|worked|working|college|'
-        r'student|plumber|electrician|developer|researcher|professor|'
-        r'where|in|at|from|related|experience|website|github)\b',
-        text, flags=re.I)
-    candidate = text[:boundary.start()] if boundary else text
-    tokens = candidate.split()
-    if not 1 <= len(tokens) <= 4:
-        return ''
-    if not all(re.fullmatch(r"[A-Za-z][A-Za-z'.-]{1,38}", x) for x in tokens):
-        return ''
-    if tokens[0].casefold() in {
-        'what','how','when','where','which','does','did','can','please','show',
-        'student','plumber','electrician','business','company','school','shop'
-    }:
-        return ''
-    return candidate[:160] if len(tokens)>1 else ''
+    """Best-effort subject extraction; never a verified identity.
+
+    Delegates to the typed parser (app/query_parse.py). Returns '' unless a
+    multi-token person-name span is found, so callers fall back to the full
+    original question rather than a silently truncated or topic-polluted name.
+    """
+    return parse_question(query).subject_text[:160]
+
+
+def public_discovery_lens(question):
+    """Select an index search lens by stated question, never by assumed identity."""
+    q=words(question).casefold()
+    if re.search(r'\b(plumb(?:er|ing)|electrician|repair|shop|contractor|vendor|salon|trade|service provider|local business|restaurant)\b',q):
+        return 'trade'
+    if re.search(r'\b(student|school|college|campus|education|scholarship|competition|university admission|sports event)\b',q):
+        return 'education'
+    if re.search(r'\b(github|linkedin|software developer|engineer|cv|portfolio|employment history)\b',q):
+        return 'professional'
+    return 'general'
 
 
 def deterministic_route(question, explicit_type=None):
@@ -90,6 +90,9 @@ def deterministic_route(question, explicit_type=None):
         subject=policy['parsed']['subject_text'][:160]
     elif kind=='person':
         subject=q[:160]
+    parsed = parse_question(q)
+    # Person-identity prompts only make sense for person-type questions.
+    person_q = kind == 'person'
     return {'subjectType':kind,'subject':subject,'context':ctx,
             'providers':providers,
             'questionType':policy['questionType'],
@@ -100,8 +103,12 @@ def deterministic_route(question, explicit_type=None):
             'originalQuery':policy['originalQuery'],
             'queryVariants':policy['variants'],
             'sourcePolicy':policy['sourcePolicy'],
+            'discoveryLens':public_discovery_lens(q),
             'strategy':'Deterministic relevance routing; broad Brave web context if enabled',
             'aiPlanned':False,
+            'parsed':parsed.as_dict(),
+            'needsClarification':bool(person_q and parsed.needs_clarification),
+            'clarification':list(parsed.clarification_prompts) if person_q else [],
             'caveat':'Subject classification and all person/name matches are tentative.'}
 
 
@@ -176,8 +183,12 @@ async def ai_route(question, fallback):
             'originalQuery':question,
             'queryVariants':fallback.get('queryVariants',[question]),
             'sourcePolicy':fallback.get('sourcePolicy','explicit task utility'),
+            'discoveryLens':public_discovery_lens(question),
             'strategy':'Groq-assisted allowed-source routing; Brave discovery separate',
             'aiPlanned':True,
+            # Parser output and clarification state come from the deterministic
+            # pass; the model may not change or clear them.
+            **{k:fallback[k] for k in ('parsed','needsClarification','clarification') if k in fallback},
             'caveat':'Source planning is not identity verification.'}
 
 
@@ -196,6 +207,9 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     if body.ai_opt_in and not plan['needsClarification']:
         plan=await ai_route(question,plan)
     plan['deferExternalSearch']=bool(plan['needsClarification'])
+    # Do not falsely reject public event/business questions that a heuristic
+    # parser mistakes for names. Keep the advisory clarification state instead;
+    # the default UI uses it to stop automatic paid searches for a person.
     # User-provided context overrides *inferred* text, but remains only clues.
     for key in ('city','organization','profession','public_handle'):
         provided=words(getattr(body,key,''))
@@ -208,7 +222,64 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
         purpose=body.purpose.strip(),authority_confirmed=True,
         ai_opt_in=body.ai_opt_in,**plan['context'])
     created=core.create_case(values,actor)
+    now=core.iso_now()
+    with db.connect() as conn:
+        conn.execute(
+            'INSERT INTO case_search_plans(case_id,original_question,plan_json,created_at,updated_at) VALUES (?,?,?,?,?)',
+            (created['id'],question,json.dumps(plan,ensure_ascii=False),now,now))
     return {'id':created['id'],'question':question,'plan':plan,
             'braveConfigured':bool(os.getenv('BRAVE_SEARCH_API_KEY','').strip()),
             'groqConfigured':bool(os.getenv('GROQ_API_KEY','').strip()),
             'notice':'Candidate sources and AI source choices are not proven identities.'}
+
+@router.get('/api/cases/{case_id}/search-plan')
+def get_search_plan(case_id: str, actor=Depends(core.actor_from_cookie)):
+    """Restore exact question and approved routing decisions after page reload."""
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        result=conn.execute(
+            'SELECT original_question,plan_json,created_at,updated_at FROM case_search_plans WHERE case_id=?',
+            (case_id,)).fetchone()
+    if result is None:
+        return {'available':False,'notice':'This case predates versioned search-plan records.'}
+    return {'available':True,'question':result['original_question'],
+            'plan':json.loads(result['plan_json']),
+            'createdAt':result['created_at'],'updatedAt':result['updated_at']}
+
+class SubjectReview(BaseModel):
+    reviewed_subject:str=Field(min_length=3,max_length=160)
+    rationale:str=Field(min_length=12,max_length=400)
+    acknowledges_unverified:bool=False
+
+@router.post('/api/cases/{case_id}/search-plan/subject-review')
+def review_parsed_subject(case_id:str,body:SubjectReview,
+                          actor=Depends(core.protect)):
+    if not body.acknowledges_unverified:
+        raise HTTPException(422,'Confirm that this corrects the search target, not a verified identity.')
+    subject=words(body.reviewed_subject)
+    if len(subject)<3 or BLOCKED_LIVE_TRACKING.search(subject):
+        raise HTTPException(422,'Invalid public subject.')
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        record=conn.execute(
+            'SELECT plan_json,original_question FROM case_search_plans WHERE case_id=?',(case_id,)).fetchone()
+        if not record:raise HTTPException(404,'Search plan unavailable')
+        prior=conn.execute('SELECT COUNT(*) n FROM evidence WHERE case_id=?',(case_id,)).fetchone()['n']
+        if prior:
+            raise HTTPException(409,'This case has source results; create a new case for a corrected search target to preserve evidence lineage.')
+        plan=json.loads(record['plan_json'])
+        plan['subject']=subject
+        plan['needsClarification']=False
+        plan['clarification']=[]
+        plan['analystSubjectReview']={
+            'searchTarget':subject,'rationale':body.rationale.strip(),
+            'reviewedBy':actor['id'],'reviewedAt':core.iso_now(),
+            'identityVerified':False}
+        conn.execute('UPDATE cases SET query=? WHERE id=?',(subject,case_id))
+        conn.execute('UPDATE case_search_plans SET plan_json=?,updated_at=? WHERE case_id=?',
+            (json.dumps(plan,ensure_ascii=False),core.iso_now(),case_id))
+    core.write_audit(actor['id'],'parsed_subject_review','case',case_id,
+                     'Corrected search target; identity remains unverified')
+    return {'plan':plan,'originalQuestion':record['original_question'],
+            'identityVerified':False,
+            'notice':'Reviewed the intended search label, not actual identity ownership.'}
