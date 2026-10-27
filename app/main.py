@@ -756,7 +756,30 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             # Persist *metadata and a one-way excerpt digest*, not copied web
             # page text. This is a review ledger, NOT quotation verification.
             with db.connect() as ground_db:
+                from .lineage import save_observation
+                from .v5 import public_https
+                persisted_leads=0
                 for source in live_brave['sources']:
+                    if not public_https(source.get('url','')):
+                        continue
+                    # P0-017: save source URL/title and an excerpt digest as a
+                    # reviewable candidate immediately. Do NOT retain indexed
+                    # snippet text without the explicit limited-text opt-in.
+                    metadata={'provider':'brave_llm_context',
+                        'sourceDate':source.get('sourceDate',''),
+                        'excerpt_sha256':hashlib.sha256(
+                            source['snippet'].encode()).hexdigest(),
+                        'page_fetched':False,'identity_verified':False,
+                        'excerpt_text_retained':False}
+                    outcome=save_observation(ground_db,case_id=case_id,
+                        run_id=response['sessionId'],
+                        query=live_brave.get('query',question)[:570],
+                        provider='brave_llm_context',
+                        source_ref=source['url'][:500],
+                        label=source['title'][:200],
+                        summary='Unverified indexed lead; page not captured. Excerpt content not retained.',
+                        url=source['url'],raw=metadata,actor_id=actor['id'])
+                    persisted_leads+=int(outcome in ('new','changed'))
                     grounding_id=uid()
                     ground_db.execute(
                         '''INSERT INTO research_grounding
@@ -780,6 +803,14 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                                 (uid(),grounding_id,case_id,source['url'],excerpt,
                                  hashlib.sha256(excerpt.encode()).hexdigest(),
                                  'explicit_case_analyst_opt_in','unverified_search_excerpt',iso_now()))
+                ground_db.execute('INSERT INTO collection_runs VALUES (?,?,?,?,?,?,?)',
+                    (uid(),case_id,'brave_llm_context','ok',persisted_leads,
+                     'Indexed leads saved as unverified case candidates; no page capture.',iso_now()))
+                ground_db.execute('INSERT INTO research_queries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                    (uid(),case_id,actor['id'],response['sessionId'],
+                     'brave_llm_context',live_brave.get('query',question)[:570],
+                     'ok',len(live_brave['sources']),persisted_leads,
+                     'Source metadata saved; excerpts not retained unless explicitly opted in.',iso_now()))
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search or body.brave_context),
                 'braveContextUsed':bool(body.brave_context),
