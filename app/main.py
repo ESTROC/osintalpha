@@ -585,6 +585,24 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
              'freshUnverifiedBraveContext':live_brave['sources'] if body.brave_context else [],
              'evidence':records,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
+    # An empty provider search is not evidence that the target does not exist.
+    # Never let a remote model synthesize a biography or allegation from zero
+    # usable source records (unless the user explicitly requested fresh browser search).
+    if not records and not live_brave['sources'] and not body.web_search and not re.fullmatch(
+            r'(?:hi|hello|hey|thanks|thank you)[!.\s]*',question,re.I):
+        abstention={'answer':(
+            'No attributable public-source records were available for this question. '
+            'This is a search-coverage limitation, not evidence of absence or proof of identity. '
+            'Add one reliable public identifier or retry an appropriate source; no biography '
+            'or allegation can be established from this evidence set.'),
+            'evidenceIds':[],'webLeads':[],'followUp':
+            'What official profile, city, organization or public identifier can narrow the search?',
+            'needsDisambiguation':ca['subject_type']=='person','answerQuality':{
+                'status':'abstained_no_source','verifiedIdentity':False,'originalSources':0}}
+        abstention['sessionId']=save_chat(case_id,actor,body,question,abstention,provider)
+        return {'model':'Source evidence gate','provider':provider,**abstention,
+                'retrieval':retrieval,'remote':False,'braveContextUsed':bool(body.brave_context),
+                'freshSourcesCount':0,'webSearch':bool(body.brave_context)}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
         raise HTTPException(409,'Groq browser search currently requires a GPT-OSS model.')
@@ -640,7 +658,27 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records'
                     +(', live Brave sources '+str(len(live_brave['sources'])) if body.brave_context else ''))
+        response['answerQuality']={
+            'status':'unverified_source_synthesis',
+            'verifiedIdentity':False,
+            'recordCitations':len(response.get('evidenceIds') or []),
+            'braveContextSources':len(live_brave['sources']),
+            'warning':'Record IDs and indexed pages establish provenance, not factual truth or the identity of the subject.'}
         response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
+        if body.brave_context and live_brave['sources']:
+            # Persist *metadata and a one-way excerpt digest*, not copied web
+            # page text. This is a review ledger, NOT quotation verification.
+            with db.connect() as ground_db:
+                for source in live_brave['sources']:
+                    ground_db.execute(
+                        '''INSERT INTO research_grounding
+                        (id,case_id,session_id,provider,query_text,source_url,
+                         source_title,published_at,excerpt_sha256,retrieved_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                        (uid(),case_id,response['sessionId'],'brave_llm_context',
+                         live_brave.get('query',question)[:570],source['url'][:600],
+                         source['title'][:200],source.get('sourceDate','')[:80],
+                         hashlib.sha256(source['snippet'].encode()).hexdigest(),iso_now()))
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search or body.brave_context),
                 'braveContextUsed':bool(body.brave_context),
@@ -833,6 +871,20 @@ def save_chat(case_id,actor,body,question,response,provider):
                  json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now(),position))
         c.execute('UPDATE research_sessions SET updated_at=? WHERE id=?',(iso_now(),session))
         return session
+
+@app.get('/api/cases/{case_id}/grounding')
+def case_source_grounding(case_id:str,actor=Depends(actor_from_cookie)):
+    """Original URLs, collection time and snippet fingerprints, not copied pages."""
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        rows=conn.execute(
+            '''SELECT session_id,provider,query_text,source_url,source_title,
+                      published_at,excerpt_sha256,retrieved_at
+               FROM research_grounding WHERE case_id=?
+               ORDER BY retrieved_at DESC LIMIT 200''',(case_id,))
+        return {'items':[dict(x) for x in rows],
+                'notice':'Indexed excerpts are unverified, source pages and identity not validated. Digests do not prove factual claims.'}
+
 
 @app.get('/api/cases/{case_id}/conversations')
 def conversations(case_id:str,actor=Depends(actor_from_cookie)):
