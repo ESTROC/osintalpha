@@ -301,6 +301,19 @@ def provider_validation(case_id:str,actor=Depends(actor_from_cookie)):
     return summarize_provider_evidence(queries,grounding)
 
 
+@app.get('/api/cases/{case_id}/coverage-index')
+def coverage_index(case_id:str,actor=Depends(actor_from_cookie)):
+    from .coverage_evaluation import case_coverage
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        evidence=[dict(r) for r in conn.execute(
+            'SELECT source_url,status,provider,fetched_at FROM evidence '
+            'WHERE case_id=? ORDER BY fetched_at DESC,id DESC',(case_id,))]
+        queries=[dict(r) for r in conn.execute(
+            'SELECT id FROM research_queries WHERE case_id=?',(case_id,))]
+    return case_coverage(evidence,queries)
+
+
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
