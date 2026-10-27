@@ -86,15 +86,34 @@ class WebSearchInput(BaseModel):
     consent:bool=False
 
 def make_queries(case,context,body):
-    base=(body.query or case['query']).strip()
+    """Use a small, explainable profile-oriented query budget.
+
+    Site filters improve discovery coverage, not identity certainty. We never
+    claim that a LinkedIn search snippet is the underlying LinkedIn profile.
+    """
+    base=' '.join((body.query or case['query']).strip().split())
     if not base:raise HTTPException(422,'Enter a public-source research query')
-    extra=[context.get('organization',''),context.get('city',''),context.get('profession',''),context.get('public_handle','')]
-    queries=[base]
-    for addition in extra:
-        part=str(addition or '').strip()
-        if part and part.casefold() not in base.casefold():
-            queries.append(base+' '+part)
-    return list(dict.fromkeys(queries))[:body.depth]
+    org=' '.join(str(context.get('organization') or '').split())[:90]
+    city=' '.join(str(context.get('city') or '').split())[:70]
+    handle=' '.join(str(context.get('public_handle') or '').split())[:65].lstrip('@')
+    distinct=[clue for clue in (org,city) if clue and clue.casefold() not in base.casefold()]
+    context_query=(base+' '+' '.join(distinct)).strip()[:200]
+    # Quoting limits accidental matches and namesake mixing, but cannot verify
+    # any person. The analyst still must inspect the original.
+    quoted='"'+base.replace('"','').strip()[:130]+'"'
+    narrowing='"'+(org or city).replace('"','').strip()[:60]+'"' if (org or city) else ''
+    queries=[context_query] if distinct else [base]
+    if case['subject_type']=='person':
+        queries.append('site:linkedin.com/in/ '+quoted+' '+narrowing)
+        queries.append('site:github.com '+(('"'+handle.replace('"','')+'"') if handle else quoted)+' '+narrowing)
+        queries.append(quoted+' '+narrowing+' (portfolio OR CV OR research OR biography)')
+    elif case['subject_type']=='organization':
+        queries.append(quoted+' official website')
+        queries.append(quoted+' registration OR legal entity')
+        queries.append('site:linkedin.com/company/ '+quoted)
+    else:
+        queries.append(base)
+    return list(dict.fromkeys(' '.join(q.split())[:200] for q in queries))[:body.depth]
 
 @router.post('/api/cases/{case_id}/web-discovery')
 async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.protect)):

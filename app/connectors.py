@@ -132,6 +132,9 @@ async def github(client, query, subject_type):
              'company':str(public_profile.get('company') or '')[:150],
              'location':str(public_profile.get('location') or '')[:100],
              'public_repos':public_profile.get('public_repos'),
+             'avatar_url':str(public_profile.get('avatar_url') or '')[:400],
+             'blog':str(public_profile.get('blog') or '')[:250],
+             'html_url':'https://github.com/'+login,
              'kind':kind,'identity_verified':False})
     items=await asyncio.gather(*(enrich(a) for a in accounts[:8]))
     return [x for x in items if x is not None]
@@ -178,7 +181,8 @@ async def openalex(client, query, subject_type):
     for a in obj.get('results', [])[:8]:
         inst = [i.get('display_name') for i in (a.get('last_known_institutions') or []) if isinstance(i, dict)]
         items.append(canon_record(a.get('display_name'), f"Author candidate. Works: {a.get('works_count', '?')}; listed institutions: {', '.join(inst) or 'not listed'}. Not a verified qualification.", a.get('id'), a.get('id'),
-            {'id': a.get('id'), 'name': a.get('display_name'), 'works_count': a.get('works_count'), 'institutions': inst}))
+            {'id': a.get('id'), 'name': a.get('display_name'), 'works_count': a.get('works_count'), 'institutions': inst,
+             'orcid': a.get('orcid'), 'identity_verified':False}))
     return items
 
 
