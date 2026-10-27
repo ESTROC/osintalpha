@@ -18,8 +18,8 @@ def test_search_requires_explicit_purpose_and_authorization(client, auth):
     result=ok.json()
     assert result['plan']['subjectType']=='person'
     assert result['plan']['aiPlanned'] is False
-    assert result['plan']['context']['organization']=='Indian Navy'
-    assert result['plan']['context']['profession']=='cybersecurity'
+    assert result['plan']['context']['organization']==''  # Topic is not confirmed employer
+    assert result['plan']['context']['profession']==''  # Topic is not confirmed profession
     assert 'github' in result['plan']['providers']
     assert client.get('/api/cases/'+result['id']).status_code==200
 

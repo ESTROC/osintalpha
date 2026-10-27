@@ -34,8 +34,10 @@ const env={document,window:{},fetch,FormData,URL,console,setTimeout,clearTimeout
 vm.runInNewContext(fs.readFileSync('static/console.js','utf8'),env);
 (async()=>{
  await new Promise(done=>setTimeout(done,80));
- assert(markup.includes('Ask a question.'),'Primary smart search not displayed');
+ assert(markup.includes('Search beyond the obvious.'),'Primary smart search not displayed');
  assert(markup.includes('smart-search-form'),'Single-search form missing');
+ assert(markup.includes('mission-map'),'Homepage geo map panel missing');
+ assert(!markup.includes('Ayush cybersecurity'),'A personal demo query leaked into the live search placeholder');
  assert(markup.includes('Manual research workspace'),'Advanced/manual search not retained');
  const form={id:'smart-search-form',dataset:{},fields:{
   question:'Example Person cybersecurity public projects',
@@ -45,10 +47,13 @@ vm.runInNewContext(fs.readFileSync('static/console.js','utf8'),env);
  await listeners.submit({target:form,preventDefault(){}});
  assert(requests.some(x=>x.url==='/api/search/start'),'Natural-language route not invoked');
  assert(requests.some(x=>x.url==='/api/cases/'+cid+'/collect'),'Routed structured source not queried');
+ assert(requests.some(x=>x.url==='/api/cases/'+cid+'/web-discovery'),'Brave Web Search index was not used alongside Groq');
  assert.strictEqual(smartBodies.length,1,'Exactly one answer should be requested');
  assert.strictEqual(smartBodies[0].brave_context,true,'Fresh indexed context not enabled for consented case');
  assert(markup.includes('The account is only a candidate'),'Answer was not shown');
  assert(markup.includes('Public account candidate'),'Source trace missing');
  assert(markup.includes('More analyst tools'),'Advanced controls missing');
+ assert(markup.includes('Brave Web'),'Provider-specific diagnostic missing');
+ assert(markup.includes('GEOSPATIAL CONTEXT'),'Public city map context panel missing');
  console.log('V7.9 unified search smoke: plan, collect, Brave+Groq, source trail PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
