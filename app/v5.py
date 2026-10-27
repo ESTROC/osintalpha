@@ -167,9 +167,16 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     if case['subject_type']=='person':
         from .query_parse import parse_question
         parsed=parse_question(search_goal)
-        if parsed.identity_state=='given_name_only' and not any(
+        # The tentative parser can mistake generic topics (e.g. "Sample
+        # public notice in 2022") for a first name. Stop searches only when
+        # the query actually asks for identifying a person or is a bare name.
+        identity_intent=(len(search_goal.split())<=3 or bool(re.search(
+            r'\b(?:who is|find|identify|locate|person|profile|background|employment|'
+            r'education|address|phone|contact|where does|work for)\b',
+            search_goal.casefold())))
+        if (parsed.identity_state=='given_name_only' and identity_intent and not any(
                 str(context.get(k) or '').strip() for k in
-                ('city','organization','public_handle')):
+                ('city','organization','public_handle'))):
             raise HTTPException(422,
                 'A single given name is ambiguous. Add a full public name, '
                 'public handle or distinguishing organization/city.')
