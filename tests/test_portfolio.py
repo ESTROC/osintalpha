@@ -47,7 +47,8 @@ def test_profile_does_not_load_untrusted_external_photo_or_random_news(client, a
     add_candidate(client, auth, case, provider='brave_web',
                   source='https://www.linkedin.com/in/test-researcher')
     out = client.get('/api/cases/' + case + '/public-portfolio').json()
-    assert out['total'] == 2
+    assert out['total'] == 3
+    assert any(x['platform'] == 'public_web_lead' for x in out['items'])
     assert all(not x['photoUrl'] for x in out['items'])
     assert any(x['platform'] == 'linkedin_lead' and not x['identityVerified']
                for x in out['items'])
