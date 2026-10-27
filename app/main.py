@@ -585,24 +585,6 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
              'freshUnverifiedBraveContext':live_brave['sources'] if body.brave_context else [],
              'evidence':records,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
-    # An empty provider search is not evidence that the target does not exist.
-    # Never let a remote model synthesize a biography or allegation from zero
-    # usable source records (unless the user explicitly requested fresh browser search).
-    if not records and not live_brave['sources'] and not body.web_search and not re.fullmatch(
-            r'(?:hi|hello|hey|thanks|thank you)[!.\s]*',question,re.I):
-        abstention={'answer':(
-            'No attributable public-source records were available for this question. '
-            'This is a search-coverage limitation, not evidence of absence or proof of identity. '
-            'Add one reliable public identifier or retry an appropriate source; no biography '
-            'or allegation can be established from this evidence set.'),
-            'evidenceIds':[],'webLeads':[],'followUp':
-            'What official profile, city, organization or public identifier can narrow the search?',
-            'needsDisambiguation':ca['subject_type']=='person','answerQuality':{
-                'status':'abstained_no_source','verifiedIdentity':False,'originalSources':0}}
-        abstention['sessionId']=save_chat(case_id,actor,body,question,abstention,provider)
-        return {'model':'Source evidence gate','provider':provider,**abstention,
-                'retrieval':retrieval,'remote':False,'braveContextUsed':bool(body.brave_context),
-                'freshSourcesCount':0,'webSearch':bool(body.brave_context)}
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
         raise HTTPException(409,'Groq browser search currently requires a GPT-OSS model.')
@@ -647,6 +629,18 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        # Source-absence review gate runs AFTER the response so clarifying
+        # questions still work. Unsupported assertive narratives are withheld.
+        if (not records and not live_brave['sources'] and not body.web_search
+                and not response.get('needsDisambiguation',False)):
+            response.update({
+                'answer':('No attributable public-source record was available. '
+                          'The system cannot establish a biography, affiliation or '
+                          'allegation from this search. Absence of results is not '
+                          'proof of absence. Please provide one public identifier '
+                          'or check the original source directly.'),
+                'evidenceIds':[],'needsDisambiguation':ca['subject_type']=='person',
+                'followUp':'Which independent public source or identifying clue should be reviewed?'})
         if body.brave_context:
             from .brave_context import clean_answer_links
             response['answer']=clean_answer_links(response['answer'],live_brave['sources'],records)
