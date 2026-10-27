@@ -64,6 +64,21 @@ def add_public_identifier(case_id:str,body:PublicIdentifierInput,
     url=urlsplit(body.source_url)
     if url.scheme!='https' or not url.hostname or url.username or url.password:
         raise HTTPException(422,'Original HTTPS public source required')
+    host=url.hostname.casefold()
+    if body.kind=='github_handle':
+        if host not in {'github.com','www.github.com'} or (
+           (url.path.strip('/').split('/') or [''])[0].casefold()!=canonical):
+            raise HTTPException(422,'Public GitHub handle must match its profile URL.')
+    if body.kind=='stackoverflow_user':
+        if host not in {'stackoverflow.com','www.stackoverflow.com'} or not url.path.startswith('/users/'+canonical+'/'):
+            raise HTTPException(422,'Public Stack Overflow ID must match its official profile URL.')
+    if body.kind=='orcid':
+        if host!='orcid.org' or url.path.strip('/')!=canonical:
+            raise HTTPException(422,'ORCID must link to its canonical public record.')
+    if body.kind=='lei':
+        if host not in {'search.gleif.org','api.gleif.org'}:
+            raise HTTPException(422,'LEI record needs an original GLEIF source.')
+
     with db.connect() as c:
         core.case_or_404(c,case_id,actor)
         candidate=c.execute('SELECT id FROM candidate_profiles WHERE id=? AND case_id=?',
@@ -131,6 +146,9 @@ def linkedin_index_notice(case_id:str,actor=Depends(core.actor_from_cookie)):
         rows=[dict(r) for r in c.execute(
           "SELECT id,source_url,label,status FROM evidence WHERE case_id=? "
           "AND source_url LIKE 'https://%linkedin.com/%' ORDER BY fetched_at DESC LIMIT 30",(case_id,))]
+    rows=[r for r in rows if (
+        (urlsplit(r['source_url']).hostname or '').casefold()=='linkedin.com' or
+        (urlsplit(r['source_url']).hostname or '').casefold().endswith('.linkedin.com'))]
     return {'indexedLinks':[{'id':r['id'],'url':r['source_url'],
                  'label':r['label'],'reviewStatus':r['status'],
                  'liveLinkedInRecordVerified':False,'employmentVerified':False} for r in rows],
