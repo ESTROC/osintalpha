@@ -18,6 +18,23 @@ def words(value):
     return [x for x in re.findall(r'[a-z0-9_]{2,}',str(value or '').casefold())
             if x not in STOP]
 
+def _conflicting_public_clues(raw,context):
+    """Explicit publisher metadata only: missing fields are not contradictions."""
+    negative=[]
+    if not isinstance(raw,dict):return negative
+    expected={
+        'city':('city','location'),
+        'organization':('organization','company','employer'),
+        'public_handle':('public_handle','handle','username','login'),
+    }
+    for label,keys in expected.items():
+        goal=str((context or {}).get(label) or '').strip().casefold()
+        if not goal:continue
+        value=next((str(raw.get(k) or '').strip().casefold() for k in keys
+                    if str(raw.get(k) or '').strip()),'')
+        if value and value!=goal:negative.append(label)
+    return negative
+
 def rank_case_evidence(rows,question,context=None,limit=35):
     """Return relevant diverse records; no match score is a probability."""
     ctx=context or {}
@@ -28,9 +45,18 @@ def rank_case_evidence(rows,question,context=None,limit=35):
     hints=Counter(hint_tokens)
     provider_docs=defaultdict(int)
     scored=[]
+    excluded={'rejected':0,'conflicting_public_metadata':0}
     for item in rows:
+        if item.get('status')=='rejected':
+            excluded['rejected']+=1
+            continue
         try:raw=json.loads(item.get('raw_json') or '{}')
         except (ValueError,TypeError):raw={}
+        if not isinstance(raw,dict):raw={}
+        conflicts=_conflicting_public_clues(raw,ctx)
+        if conflicts:
+            excluded['conflicting_public_metadata']+=1
+            continue
         label=Counter(words(item.get('label','')))
         summary=Counter(words(item.get('summary','')))
         attrs=Counter(words(' '.join(str(raw.get(k) or '') for k in
@@ -56,5 +82,6 @@ def rank_case_evidence(rows,question,context=None,limit=35):
                 selected.append(row)
                 if len(selected)==limit:break
     return selected,{'totalRecords':len(rows),'selected':len(selected),
-         'method':'lexical query+public clue ranking; no calibrated identity confidence',
+         'method':'lexical ranking with explicit public-metadata contradiction exclusions; no calibrated identity confidence',
+         'excludedByReason':excluded,
          'providers':dict(Counter(r.get('provider','unknown') for r in selected))}

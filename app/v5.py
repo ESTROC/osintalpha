@@ -89,6 +89,8 @@ class WebSearchInput(BaseModel):
     adaptive:bool=False
     lens:Literal['general','professional','education','trade','organization']='general'
     freshness:Literal['all','pd','pw','pm','py']='all'
+    date_from:str|None=Field(default=None,max_length=10)
+    date_to:str|None=Field(default=None,max_length=10)
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     consent:bool=False
@@ -169,6 +171,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                 'public handle or distinguishing organization/city.')
     # P0-020: a user override is explicit; otherwise prefer the full original
     # investigation question over a derived truncated case subject.
+    from .date_context import resolve_page_window
+    page_window=resolve_page_window(search_goal,body.date_from,body.date_to,body.freshness)
     queries=make_queries(case,context,body,original_question)
     runid=core.uid()
     results=[]
@@ -186,16 +190,19 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                         params={'q':query,'count':12,'offset':page,'safesearch':'strict',
                                 'text_decorations':'false','result_filter':'web',
                                 'country':body.country,'search_lang':body.search_lang,
-                                **({'freshness':body.freshness} if body.freshness!='all' else {})},
+                                **({'freshness':page_window['freshness']} if page_window['freshness']!='all' else {})},
                         headers={'X-Subscription-Token':key,'Accept':'application/json'})
                     response.raise_for_status()
                     payload=response.json()
+                    from .date_context import date_provenance
+                    retrieved=core.iso_now()
                     for x in payload.get('web',{}).get('results',[])[:12]:
                         url=str(x.get('url',''))
                         if not public_https(url):continue
                         items.append({'title':str(x.get('title') or url)[:200],
                                       'description':str(x.get('description') or '')[:900],
-                                      'url':url})
+                                      'url':url,
+                                      'dateProvenance':date_provenance(x,retrieved)})
                     decision=coverage_decision(items,queries_executed=page+1,
                                                max_queries=body.pages)
                     if (decision['stop'] or
@@ -226,7 +233,9 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                 raw={'provider':'Brave Web Search','title':item['title'],
                      'snippet':item['description'],'url':item['url'],
                      'searchCountry':body.country,'searchLanguage':body.search_lang,
-                     'requestedFreshness':body.freshness,
+                     'requestedFreshness':page_window['freshness'],
+                     'pageDateFilter':page_window,
+                     'dateProvenance':item['dateProvenance'],
                      'identity_verified':False,'page_fetched':False}
                 disposition=save_observation(conn,case_id=case_id,run_id=runid,
                     query=query,provider='brave_web',
@@ -245,7 +254,7 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
         conn.execute('UPDATE cases SET last_collected=? WHERE id=?',(core.iso_now(),case_id))
     core.write_audit(actor['id'],'web_discovery','case',case_id,f'{len(queries)} queries, {new} saved')
     return {'originalQuestion':original_question,
-            'searchGoal':search_goal,
+            'searchGoal':search_goal,'pageDateWindow':page_window,
             'queryOrigin':'analyst_override' if body.query else
                           ('original_question' if saved_plan else 'legacy_case_subject'),
             'originalQuestionPreserved':True,
