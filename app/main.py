@@ -78,7 +78,13 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '8.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    git_revision=os.getenv('RENDER_GIT_COMMIT','').strip()
+    if not re.fullmatch(r'[a-fA-F0-9]{40}',git_revision):git_revision=''
+    return {'ok': True, 'version': '8.0.0',
+            'revision':git_revision or None,
+            'revisionSource':'render_git_metadata' if git_revision else 'unavailable',
+            'database': 'postgres' if db.is_postgres() else 'sqlite',
+            'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
