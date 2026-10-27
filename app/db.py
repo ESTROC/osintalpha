@@ -264,6 +264,46 @@ CREATE TABLE IF NOT EXISTS case_assessments(
  updated_at TEXT NOT NULL
 );
 
+
+CREATE TABLE IF NOT EXISTS research_aliases (
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ alias TEXT NOT NULL, alias_type TEXT NOT NULL, source_url TEXT NOT NULL DEFAULT '',
+ rationale TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS research_alias_case ON research_aliases(case_id,created_at);
+CREATE TABLE IF NOT EXISTS agency_recipes (
+ id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES users(id),
+ title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',question TEXT NOT NULL,
+ version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS agency_recipes_owner ON agency_recipes(owner_id,updated_at);
+CREATE TABLE IF NOT EXISTS sourced_relationships (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ left_name TEXT NOT NULL,right_name TEXT NOT NULL,relationship TEXT NOT NULL,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ rationale TEXT NOT NULL,review_state TEXT NOT NULL DEFAULT 'proposed',
+ created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,
+ reviewed_by TEXT,reviewed_at TEXT);
+CREATE INDEX IF NOT EXISTS sourced_relationship_case ON sourced_relationships(case_id,created_at);
+CREATE TABLE IF NOT EXISTS case_signoffs (
+ id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id), decision TEXT NOT NULL,
+ note TEXT NOT NULL, signed_at TEXT NOT NULL,
+ review_digest TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS case_signoffs_case ON case_signoffs(case_id,signed_at);
+CREATE TABLE IF NOT EXISTS source_feedback (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id), relevance TEXT NOT NULL,
+ rationale TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS source_feedback_case ON source_feedback(case_id,created_at);
+CREATE TABLE IF NOT EXISTS translation_notes (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ language TEXT NOT NULL,source_quote TEXT NOT NULL,translation TEXT NOT NULL,
+ translator TEXT NOT NULL,created_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS translation_notes_case ON translation_notes(case_id,created_at);
+
 """
 def hash_password(password):
     salt=secrets.token_hex(16)
