@@ -1,53 +1,56 @@
-# OSINT Alpha V4 — Analyst Research Workbench
+# OSINT Alpha — Public-Source Investigation Workbench
 
-An **evidence-first public-source research workspace**, not a universal intelligence engine. The product supports source planning, bounded collection, candidate identity grouping, analyst classifications, saved research conversations and source-backed reports.
+**Release branch:** V8.0 P2/P3 agency tools. **Stable baseline:** V7.9.  
+**Live frontend after a reviewed merge:** https://osintalpha-frontend.vercel.app  
+**Backend:** https://osintalpha-api.onrender.com  
+**Agency operations:** \`/assets/agency.html?case=<authorized-case-id>\` (analyst login required)  
+**Engineering and remaining issues:** [P2/P3 implementation status](docs/P2_P3_IMPLEMENTATION_STATUS.md).
 
-**Live frontend:** https://osintalpha-frontend.vercel.app  
-**API:** https://osintalpha-api.onrender.com  
-**Latest release notes:** [V4 Analyst Workbench](docs/WORKSPACE_V4.md)
+## Intended analyst workflow
 
-## Core workflow
+1. Log in using your assigned analyst account; administrators should not share credentials.
+2. Search a public-source research question with a legitimate authorized purpose.
+3. Optionally consent to Groq and Brave and choose an explicit search locale, date range, original phrase, exclude term or public site.
+4. Review *candidate* public records, original links, source dates and provider errors; distinguish namesakes.
+5. Ask targeted follow-up questions and use human-review controls for sources, claims and uncertain relationships.
+6. Use **More analyst tools → Advanced agency toolkit** for a dated timeline, typed aliases, relationships, saved procedures, paginated evidence, review task suggestions, redacted export previews, sign-off and case comparisons.
+7. Export source-linked assessment only after explicit review. Saved-source metadata hashes are **not** a certified chain of custody.
 
-1. Start an authorized investigation with a subject, purpose and optional public identifying clues.
-2. Preview the source-query plan (quick / standard / thorough).
-3. Execute allowlisted public API searches, inspect both returned and newly saved results.
-4. Filter source records, reject unrelated namesakes and group possible identity profiles explicitly.
-5. Attach source-linked claims, document uncertainty and write an analyst conclusion.
-6. Export the source-attributed assessment to PDF or HTML. Reopen the research later, including its saved chat history.
+The main case UI has four tabs. Specialist functions remain optional.
 
-**Scope:** public candidate records only; no universal browsing/index, private surveillance, verified person identification or enterprise certification. Remote AI requires an API key and explicit case consent; model-proposed URLs still require independent checking.
+## Connected sources versus references
 
-## Storage and operations
+Actual first-party connectors currently query GitHub, Stack Overflow, OpenAlex, Crossref, GLEIF, Wikipedia, Wikidata, GDELT and optional public event/road-camera feeds. Brave Search and Brave LLM Context require a private backend API key; Groq responses require its own private key and case consent.
 
-The Render deployment uses PostgreSQL, but the free database is **time-limited**. Migrate to an adequately backed-up paid plan before retaining valuable information. Previous SQLite evidence was not automatically migrated.
+Public TfL JamCam discovery uses the official anonymous low-quota API or a configured developer key. Camera stills load **only after request**, with original-publisher attribution and **no independently verified per-frame timestamp**. A dated NASA GIBS satellite layer is available in World Intelligence, with date, cloud and availability caveats. Neither is a personal tracking feature.
 
-## Tests
+SpiderFoot, Sherlock, Maigret, OpenAleph, FollowTheMoney, OpenCTI, IntelOwl, ArchiveBox and pywb are **not deployed upstream engines**. They need individual security, licensing, site-policy, hosting and acceptance checks; reference links are not API integration.
+
+## Configuration
+
+See [\`.env.example\`](.env.example) and [\`render.yaml\`](render.yaml).
+
+- Required: \`OSINTALPHA_ADMIN_PASSWORD\`, a PostgreSQL \`DATABASE_URL\` for durability, HTTPS secure-cookie configuration.
+- Optional server secrets: \`GROQ_API_KEY\`, \`BRAVE_SEARCH_API_KEY\`, \`XAI_API_KEY\`, \`TFL_APP_KEY\`.
+- Optional model setting: \`GROQ_MODEL=openai/gpt-oss-120b\`. This value is a known default, **not** a verified long-term provider compatibility guarantee.
+- Keys never belong in frontend files, reports, GitHub commits, or chat messages.
+- The free Render PostgreSQL instance is scheduled to expire **2026-11-23**. Upgrade and test a backup restoration before storing valuable work.
+
+## Verification
 
 \`\`\`bash
 python -m compileall -q app run.py
 pytest -q
 node --check static/console.js
+node --check static/agency.js
 node tests/console_v3_smoke.cjs
 node tests/console_v4_smoke.cjs
+node tests/console_v5_smoke.cjs
+node tests/console_v7_9_smoke.cjs
 \`\`\`
 
-These are mock-backed tests and UI simulations. They do not measure identity resolution, broad public-web recall or production threat intelligence accuracy.
+Passing mocked tests and simulated UI checks does not establish source truth, independent identity accuracy, live provider availability or agency-grade security. The application is an evaluation platform; do not make high-impact conclusions without original evidence and human authorization.
 
----
+## What remains
 
-## Local quick start
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-python run.py
-```
-
-## Quality checks
-```bash
-pytest -q
-node --check static/console.js
-python -m compileall -q app run.py
-```
-
-Security: do not commit environment secrets. Render Free SQLite data is ephemeral and not intended for sensitive or enduring investigations.
+Read [P2/P3 status](docs/P2_P3_IMPLEMENTATION_STATUS.md) and [the comprehensive agency register](docs/SHALINI_HANDOVER_V7_9.md). External OSINT services, OCR, forensic WARC archives, certified chain-of-custody, continuous provider uptime, complete mobile browser QA and licensed data contracts remain distinct follow-up work.
