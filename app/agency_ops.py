@@ -369,3 +369,76 @@ def get_translations(case_id:str,actor=Depends(core.actor_from_cookie)):
         case_record(c,case_id,actor)
         rows=[dict(x) for x in c.execute('SELECT * FROM translation_notes WHERE case_id=? ORDER BY created_at DESC LIMIT 100',(case_id,))]
     return {'items':rows}
+
+
+class TaskBatchInput(BaseModel):
+    ids:list[str]=Field(min_length=1,max_length=20)
+    status:Literal['todo','in_progress','blocked','awaiting_review','cancelled']
+    note:str=Field(min_length=20,max_length=800)
+
+@router.post('/api/cases/{case_id}/tasks/batch')
+def task_batch(case_id:str,body:TaskBatchInput,actor=Depends(core.protect)):
+    ids=list(dict.fromkeys(body.ids))
+    if len(ids)>20:raise HTTPException(422,'At most twenty tasks may be updated at once.')
+    with db.connect() as c:
+        case_record(c,case_id,actor)
+        # Fail the entire batch if even one id is outside this case.
+        rows=[dict(x) for x in c.execute(
+            'SELECT id,status FROM investigation_tasks WHERE case_id=? AND id IN ('+
+            ','.join('?' for _ in ids)+')',[case_id]+ids)]
+        if len(rows)!=len(ids):
+            raise HTTPException(404,'One or more tasks are not in the authorized case.')
+        now=core.iso_now()
+        for row in rows:
+            c.execute('UPDATE investigation_tasks SET status=?,updated_at=? WHERE id=?',
+                      (body.status,now,row['id']))
+            c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?,?)',
+                      (core.uid(),row['id'],case_id,actor['id'],row['status'],body.status,body.note.strip(),now))
+    core.write_audit(actor['id'],'batch_task_update','case',case_id,str(len(rows))+' '+body.status)
+    return {'changed':len(rows),'status':body.status,
+            'notice':'Batch marking tasks done is intentionally disabled; final review requires individual evidence.'}
+
+@router.post('/api/cases/{case_id}/suggest-review-tasks')
+def suggest_review_tasks(case_id:str,limit:int=Query(default=5,ge=1,le=10),actor=Depends(core.protect)):
+    with db.connect() as c:
+        case_record(c,case_id,actor)
+        candidates=[dict(r) for r in c.execute(
+            "SELECT id,label,status,source_url FROM evidence WHERE case_id=? AND status IN ('candidate','disputed') ORDER BY fetched_at DESC,id DESC LIMIT 50",(case_id,))]
+        existing=[x['description'] for x in c.execute(
+            'SELECT description FROM investigation_tasks WHERE case_id=?',(case_id,))]
+        created=[]
+        for ev in candidates:
+            if any(ev['id'] in desc for desc in existing):continue
+            tid=core.uid();now=core.iso_now()
+            title=('Verify original source: '+ev['label'])[:150]
+            details=('Review source ownership, namesakes and factual reliability; evidence ID: '+ev['id']+
+                     '; original URL: '+ev['source_url'])[:1100]
+            c.execute('INSERT INTO investigation_tasks VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                      (tid,case_id,title,details,'todo','high' if ev['status']=='disputed' else 'normal',
+                       actor['id'],'',actor['id'],now,now))
+            c.execute('INSERT INTO investigation_task_events VALUES (?,?,?,?,?,?,?,?)',
+                      (core.uid(),tid,case_id,actor['id'],'','todo','Source verification proposed by analyst',now))
+            created.append(tid)
+            if len(created)>=limit:break
+    core.write_audit(actor['id'],'suggest_review_tasks','case',case_id,str(len(created)))
+    return {'created':len(created),'taskIds':created,
+            'notice':'Suggested work, not automated identity corroboration.'}
+
+@router.get('/api/cases/{case_id}/export-preview')
+def export_preview(case_id:str,reviewed_only:bool=True,redact_labels:bool=True,actor=Depends(core.actor_from_cookie)):
+    pack=evidence_pack(case_id,reviewed_only,actor)
+    # Redacted preview is distinct from full evidence pack; original URLs are
+    # intentionally not leaked in redacted previews.
+    rows=[]
+    for e in pack['evidence']:
+        rows.append({'provider':e['provider'],
+                     'label':'[redacted candidate label]' if redact_labels else e['label'],
+                     'status':e['status'],
+                     'fetchedAt':e['fetched_at'],
+                     'url':None if redact_labels else e['source_url']})
+    return {'caseId':case_id,'preview':rows,'counts':{
+               'included':len(rows),'claims':len(pack['claims'])},
+            'signedOff':bool(pack['signoffCurrent'] and pack['signoff'] and
+                             pack['signoff']['decision']=='reviewed_with_limitations'),
+            'redactLabels':redact_labels,'reviewedOnly':reviewed_only,
+            'notice':'Preview is not a signed or automatically redacted PDF. A reviewer must inspect the final export and sources.'}
