@@ -95,3 +95,21 @@ def test_start_uses_model_router_only_with_per_case_opt_in(client,auth,monkeypat
 def test_brave_query_does_not_duplicate_known_subject():
     assert composed_query({'query':'Example Person'},'Example Person worked on public projects?',{}) == \
            'Example Person worked on public projects?'
+
+
+def test_headline_question_is_not_truncated_or_polluted_and_asks_for_clarification(client, auth):
+    """Regression for issues 002/019/020/032 (V7.9 sent 'Ayush cybersecurity Indian')."""
+    q = 'Ayush cybersecurity Indian Navy'
+    r = client.post('/api/search/start', headers=auth, json={
+        'question': q, 'authority_confirmed': True,
+        'purpose': 'Authorized synthetic parser regression check'})
+    assert r.status_code == 201, r.text
+    plan = r.json()['plan']
+    assert plan['subject'] == q                      # full phrase, never 'Ayush' / pseudo-name
+    assert plan['providers'] == []                   # no structured API on a bare given name
+    assert plan['needsClarification'] is True and plan['clarification']
+    parsed = plan['parsed']
+    assert parsed['name_tokens'] == ['Ayush'] and parsed['topics'] == ['cybersecurity']
+    assert parsed['organization_clues'] == ['Indian Navy']
+    assert parsed['attribution_allowed'] is False
+    assert plan['context']['organization'] == ''     # clue stays unverified, not a fact
