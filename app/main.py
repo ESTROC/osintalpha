@@ -876,7 +876,7 @@ async def security_headers(req:Request,call_next):
     res.headers['X-Frame-Options']='DENY'
     res.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
     if req.url.path == '/' or req.url.path.startswith('/assets/'):
-        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     return res
 
 
@@ -927,3 +927,7 @@ app.include_router(duplicate_source_router)
 # Human-labelled identity-link review and internal signal-evaluation metrics.
 from .quality import router as identity_quality_router
 app.include_router(identity_quality_router)
+
+# Candidate professional portfolio and analyst-controlled coarse public place preview.
+from .portfolio import router as public_portfolio_router
+app.include_router(public_portfolio_router)
