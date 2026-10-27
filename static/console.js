@@ -238,6 +238,7 @@ function rich(text){let html='',ul=false;const inline=x=>h(x).replace(/\*\*([^*]
 function citations(ids){const ev=s.case?.evidence||[];return (ids||[]).map(id=>ev.find(e=>e.id===id)).filter(Boolean).map((x,n)=>'<a class="tag accent" target="_blank" rel="noopener noreferrer" href="'+h(url(x.source_url))+'">Source '+(n+1)+': '+h(x.provider)+'</a>').join('')}
 function caseAssistant(){
  const c=s.case.case,p=s.provider;
+ const route=s.smartPlan||null;
  const history='<div class="source-item"><div class="eyebrow" style="margin-bottom:10px">SAVED RESEARCH CONVERSATIONS</div><div class="inline-actions"><select id="conversation-select" style="flex:1;min-width:130px"><option value="">New conversation</option>'+
  (s.conversations||[]).map(x=>'<option value="'+h(x.id)+'" '+(s.sessionId===x.id?'selected':'')+'>'+h(x.title.slice(0,55))+'</option>').join('')+
  '</select><button class="btn small" data-newchat>New chat</button></div><p class="help">Chats and source links are saved to the investigation database.</p></div>';
@@ -258,7 +259,14 @@ function caseAssistant(){
  const needsConsent=!c.ai_opt_in&&canRemote?
   '<div class="callout warn"><strong>Remote AI is currently off for this case.</strong><p>To activate GroqCloud, you must explicitly permit sending up to 35 saved source records and recent chat messages to the model provider when you send a message.</p><button type="button" data-consent class="btn primary small">Enable remote AI for this case</button></div>':
   '<div class="callout '+(c.ai_opt_in?'ok':'warn')+'">'+(c.ai_opt_in?'Remote-AI consent enabled for this case. Records are sent only when a remote provider is selected.':'Remote-AI consent disabled. A remote key is required for model reasoning.')+'</div>';
- return '<div class="ai-layout"><section class="panel"><div class="panel-head"><div><div class="panel-title">Case research assistant</div><div class="panel-meta">Conversation, identity disambiguation and attributable evidence</div></div><span class="tag '+(p==='local'?'warn':'ok')+'">'+h(({local:'OFFLINE RULES · NO AI',groq:'GROQCLOUD · AI',grok:'XAI GROK · AI'})[p])+'</span></div>'+
+ const sourceCards=(s.case?.evidence||[]).slice(0,12).map(x=>'<div class="smart-source"><div><strong>'+h(x.label)+'</strong><p>'+h(x.provider)+' · '+h(x.status)+' · '+h(when(x.fetched_at))+'</p></div>'+link(x.source_url,'Original source')+'</div>').join('');
+ const statusCard=(route||s.smartStage||s.smartIssues.length)?
+ '<section class="panel smart-status"><div class="panel-head"><strong class="panel-title">Search coverage and source trace</strong>'+tag(s.smartStage?'researching':'candidate')+'</div>'+
+ '<div class="panel-pad"><p class="page-sub">'+h(s.smartStage||'Search run completed; review candidate records and verify identities.')+'</p>'+
+ (route?'<div class="badge-row"><span class="tag">Subject (tentative): '+h(route.subject)+'</span><span class="tag">Router: '+h(route.aiPlanned?'Groq-guided':'Rules fallback')+'</span><span class="tag">Selected APIs: '+h(route.providers.join(', ')||'Web index only')+'</span></div><p class="help">'+h(route.caveat)+'</p>':'')+
+ s.smartIssues.map(x=>'<div class="callout warn">'+h(x)+'</div>').join('')+'</div></section>':'';
+ const sourcePanel='<details class="smart-sources" '+(s.messages.length?'':'open')+'><summary>Saved source leads · '+(s.case?.evidence||[]).length+' records (not verified)</summary><div class="smart-source-list">'+(sourceCards||'<div class="empty">No source records yet. A missing result is not proof a record does not exist.</div>')+'</div></details>';
+ return statusCard+sourcePanel+'<div class="ai-layout"><section class="panel"><div class="panel-head"><div><div class="panel-title">Case research assistant</div><div class="panel-meta">Conversation, identity disambiguation and attributable evidence</div></div><span class="tag '+(p==='local'?'warn':'ok')+'">'+h(({local:'OFFLINE RULES · NO AI',groq:'GROQCLOUD · AI',grok:'XAI GROK · AI'})[p])+'</span></div>'+
  '<div id="chat-history" class="chat-history">'+messages+'</div>'+
  '<form id="ask-form" class="chat-composer"><textarea name="question" maxlength="2000" required placeholder="Ask naturally: Who is this person? I mean the one in Delhi..."></textarea><button type="submit" class="btn primary" '+(s.busy?'disabled':'')+'>'+(s.busy?'Analyzing…':'Send →')+'</button></form>'+
  '</section><aside class="panel"><div class="panel-head"><div class="panel-title">Research intelligence</div></div><div class="panel-pad input-stack">'+intro+
@@ -336,7 +344,7 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
  const [tr,conv,history,researchPlan,runs,candidates,intel,webProviders,changes,jobs,excerpts,identity,tasks,assignees,members,duplicates,quality]=await Promise.all([
    api('/api/cases/'+s.id+'/triage'),
