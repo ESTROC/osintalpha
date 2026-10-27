@@ -214,3 +214,23 @@ def test_010_reference_metric_refuses_fake_ground_truth():
     bad[0]['independent_reviewer_ids']=['reviewer-1']
     with pytest.raises(ValueError):
         score_reference_set(bad)
+
+
+def test_002_auditable_manual_subject_correction_before_collection(client,auth):
+    created=client.post('/api/search/start',headers=auth,json={
+        'question':'Demo cyber-security public projects',
+        'purpose':'Authorized synthetic analyst disambiguation acceptance',
+        'authority_confirmed':True})
+    assert created.status_code==201,created.text
+    cid=created.json()['id']
+    review=client.post(f'/api/cases/{cid}/search-plan/subject-review',headers=auth,json={
+        'reviewed_subject':'Demo Example Person',
+        'rationale':'Analyst supplied a distinguishing full public search label.',
+        'acknowledges_unverified':True})
+    assert review.status_code==200,review.text
+    assert review.json()['identityVerified'] is False
+    assert review.json()['originalQuestion']=='Demo cyber-security public projects'
+    assert client.get(f'/api/cases/{cid}').json()['case']['query']=='Demo Example Person'
+    recovered=client.get(f'/api/cases/{cid}/search-plan').json()['plan']
+    assert recovered['analystSubjectReview']['identityVerified'] is False
+    assert recovered['subject']=='Demo Example Person'
