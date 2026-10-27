@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v2 research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:''};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:''};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'e.g. Jane Researcher',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'e.g. Example Systems Ltd',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'e.g. example.org',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'e.g. 8.8.8.8',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -383,6 +383,81 @@ async function collect(){
   toast(out.returned+' records returned, '+out.new+' newly saved; '+out.errors+' errors.',out.errors>0);
  }finally{s.busy=false;render()}
 }
+
+async function smartLaunch(form){
+ const d=Object.fromEntries(new FormData(form).entries());
+ const question=String(d.question||'').trim();
+ if(!question||s.busy)return;
+ s.busy=true;s.smartStage='Planning relevant public sources';s.smartIssues=[];s.smartQuestion=question;render();
+ try{
+  const started=await api('/api/search/start',{method:'POST',body:{
+    question,purpose:d.purpose||'Authorized public-source research and due diligence',
+    authority_confirmed:!!d.authority,ai_opt_in:!!d.ai_opt_in,
+    subject_type:d.subject_type||null,city:d.city||'',organization:d.organization||'',
+    profession:d.profession||'',public_handle:d.public_handle||''
+  }});
+  s.smartPlan=started.plan;s.id=started.id;s.where='case';s.tab='assistant';
+  s.messages=[];s.conversations=[];s.sessionId=null;s.case=null;s.brief=null;
+  s.provider=(started.groqConfigured&&d.ai_opt_in)?'groq':'local';
+  s.braveContext=!!(started.braveConfigured&&started.groqConfigured&&d.ai_opt_in);
+  s.webSearch=false;
+  const providerInfo=await api('/api/research/providers');
+  s.webProviders=providerInfo;
+  await Promise.all([fetchCase(),refreshCases()]);
+  const providers=started.plan.providers||[];
+  if(providers.length){
+    s.smartStage='Checking '+providers.join(', ')+' public sources';render();
+    try{
+      const collected=await api('/api/cases/'+started.id+'/collect',{method:'POST',body:{providers}});
+      const failures=(collected.results||[]).filter(r=>r.status==='error');
+      if(failures.length)s.smartIssues.push(failures.length+' structured source(s) unavailable; check original source coverage.');
+    }catch(error){
+      s.smartIssues.push('Some structured sources could not be collected: '+error.message);
+    }
+  }
+  if(started.braveConfigured&&!s.braveContext){
+    s.smartStage='Searching public web index';render();
+    try{
+      const indexed=await api('/api/cases/'+started.id+'/web-discovery',{
+        method:'POST',body:{query:question,depth:1,lens:'general',consent:true}});
+      if(indexed.errors)s.smartIssues.push('Brave web discovery reported '+indexed.errors+' provider error(s).');
+    }catch(error){
+      s.smartIssues.push('Public web discovery unavailable: '+error.message);
+    }
+  }
+  await fetchCase();
+  s.smartStage=s.provider==='groq'?'Analyzing attributed public sources with Groq':'Organizing saved public-source leads';
+  s.messages=[{role:'user',text:question}];render();
+  if(s.provider==='groq'){
+    try{
+      let response;
+      try{
+        response=await api('/api/cases/'+started.id+'/chat',{method:'POST',
+          body:{question,provider:'groq',brave_context:s.braveContext,web_search:false}});
+      }catch(err){
+        if(!s.braveContext)throw err;
+        s.smartIssues.push('Fresh Brave-to-Groq context failed: '+err.message+'; AI retried with saved evidence only.');
+        response=await api('/api/cases/'+started.id+'/chat',{method:'POST',
+          body:{question,provider:'groq',brave_context:false,web_search:false}});
+      }
+      s.sessionId=response.sessionId||null;
+      s.messages.push({role:'assistant',text:response.answer,model:response.model,
+        ids:response.evidenceIds||[],followUp:response.followUp||'',webSearch:!!response.webSearch,
+        braveContextUsed:!!response.braveContextUsed,webLeads:response.webLeads||[],
+        retrieval:response.retrieval||null});
+      s.conversations=(await api('/api/cases/'+started.id+'/conversations')).items||[];
+    }catch(err){
+      s.smartIssues.push('AI summary unavailable: '+err.message);
+      s.messages.push({role:'assistant',text:'The AI answer is unavailable. Open the source records below and review each original. A search result alone does not identify a person.',model:'Source-only fallback'});
+    }
+  }else{
+    const amount=(s.case?.evidence||[]).length;
+    s.messages.push({role:'assistant',text:'Found '+amount+' saved public-source candidates. Groq analysis was not enabled for this case. Review the Sources tab and original URLs; no profile or person identity has been established.',model:'Source-only mode'});
+  }
+  s.smartStage='';s.tab='assistant';
+ }finally{s.busy=false;render()}
+}
+
 async function launch(form){const d=Object.fromEntries(new FormData(form).entries());s.busy=true;render();try{const ca=await api('/api/cases',{method:'POST',body:{title:modes[s.mode].name+' · '+d.query.trim(),subject_type:s.mode,query:d.query.trim(),purpose:d.purpose.trim(),authority_confirmed:!!d.authority,ai_opt_in:!!d.ai_opt_in,city:d.city||'',organization:d.organization||'',profession:d.profession||'',public_handle:d.public_handle||''}});await refreshCases();await openCase(ca.id);s.busy=false;try{await collect()}catch(err){toast('Case created, but source lookup failed: '+err.message,true)}}finally{s.busy=false;render()}}
 async function loadGeo(){s.geoStatus='loading';s.geoError='';render();try{const out=await api(['earthquakes','nasa'].includes(s.feed)?'/api/geo/events?feed='+s.feed:'/api/geo/cameras?provider='+(s.feed==='caltrans'?'caltrans':'tfl'));s.geo=out.items||[];s.geoStatus=out.status||'ok';s.geoError=out.note||out.message||''}catch(err){s.geo=[];s.geoError=err.message;s.geoStatus='unavailable'}render()}
 async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.server=auth;const [ca,ov,so,pr,cap]=await Promise.all([api('/api/cases'),api('/api/overview'),api('/api/sources'),api('/api/projects'),api('/api/capabilities')]);s.cases=ca.items||[];s.overview=ov;s.sources=so.items||[];s.projects=pr.items||[];s.capabilities=cap;if(s.user?.role==='admin')s.users=(await api('/api/users')).items;s.where='home';render()}
@@ -522,9 +597,10 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
+if(f.id==='smart-search-form')await smartLaunch(f);
 if(f.id==='identity-label-form'){
  const d=Object.fromEntries(new FormData(f).entries());
  await api('/api/cases/'+s.id+'/identity-reviews',{method:'POST',body:d});
