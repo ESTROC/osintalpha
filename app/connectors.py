@@ -311,25 +311,41 @@ async def geo_events(kind, client=None):
     return out
 
 
+def public_tfl_still(raw):
+    """Restrict directly displayed images to TfL's explicitly published public JamCam bucket."""
+    value=str(raw or '')
+    return value if re.fullmatch(
+        r'https://s3-eu-west-1\.amazonaws\.com/jamcams\.tfl\.gov\.uk/[0-9.]+\.jpg',
+        value,re.I) else ''
+
 async def tfl_cameras(client=None):
-    key = os.getenv('TFL_APP_KEY', '').strip()
-    if not key:
-        raise AdapterError('TfL APP_KEY not configured. Camera discovery disabled; open official provider/project links instead.')
+    """Official public JamCam metadata; 50/min anonymous tier is limited and optional key boosts it."""
+    key=os.getenv('TFL_APP_KEY','').strip()
     if client is None:
-        async with httpx.AsyncClient(timeout=15) as c:
+        async with httpx.AsyncClient(timeout=15,follow_redirects=False) as c:
             return await tfl_cameras(c)
-    obj = await get_json(client, 'https://api.tfl.gov.uk/Place/Type/JamCam', {'app_key': key})
-    out = []
-    for row in (obj if isinstance(obj, list) else [])[:220]:
-        props = row.get('additionalProperties') or []
-        imgs = [p.get('value') for p in props if p.get('key') == 'imageUrl']
-        lat, lon = row.get('lat'), row.get('lon')
-        if lat is None or lon is None: continue
-        out.append({'id': row.get('id'), 'type': 'camera', 'provider': 'TfL', 'name': row.get('commonName') or 'London JamCam',
-                    'lat': lat, 'lon': lon, 'url': 'https://tfl.gov.uk/traffic/status/',
-                    'feedUrl': imgs[0] if imgs else None, 'observedAt': None,
-                    'value': 'Publisher camera listing; capture time not established'})
-    return out
+    rows=await get_json(client,'https://api.tfl.gov.uk/Place/Type/JamCam',
+                        {'app_key':key} if key else None)
+    items=[]
+    for row in (rows if isinstance(rows,list) else [])[:350]:
+        if not isinstance(row,dict):continue
+        try:
+            lat,lon=float(row.get('lat')),float(row.get('lon'))
+            if not (51.0<=lat<=52.0 and -1.0<=lon<=1.0):continue
+        except (TypeError,ValueError):continue
+        props={str(x.get('key') or ''):x.get('value') for x in (row.get('additionalProperties') or [])
+               if isinstance(x,dict)}
+        available=str(props.get('available','')).casefold()=='true'
+        src=public_tfl_still(props.get('imageUrl')) if available else ''
+        items.append({'id':row.get('id'),'type':'camera','provider':'TfL Open Data',
+            'name':row.get('commonName') or 'London public traffic camera',
+            'lat':lat,'lon':lon,'url':'https://tfl.gov.uk/traffic/status/',
+            'feedUrl':src or None,'observedAt':None,
+            'mediaStatus':('Official publisher-listed still; capture timestamp not confirmed'
+                           if src else 'Image unavailable, unverified or publisher not available'),
+            'value':'Public road camera metadata only; never evidence of a person location',
+            'attribution':'Powered by TfL Open Data'})
+    return items
 
 
 OSS_PROJECTS = [

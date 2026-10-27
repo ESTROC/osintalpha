@@ -205,3 +205,9 @@ body{overflow-x:clip}
 .account-asset strong{font-size:12px;overflow-wrap:anywhere}
 .account-asset .text-link{font-size:11px;white-space:normal}
 @media(max-width:790px){.intel-map-empty{min-height:145px;border-left:0;border-top:1px solid #2b3c53}}
+
+/* V8: source camera metadata, deliberate publisher still preview */
+.camera-still{margin:10px 0;padding:9px;border:1px solid #394761;background:#09111f;border-radius:9px}
+.camera-still img{display:block;width:100%;max-height:330px;object-fit:contain;background:#080d16;border-radius:5px}
+.camera-still figcaption{font-size:11px;line-height:1.5;color:#a2b1cb;padding-top:7px}
+.agency-tools-shortcut{font-size:12px}

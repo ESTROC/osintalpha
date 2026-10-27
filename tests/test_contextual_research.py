@@ -100,7 +100,7 @@ def test_groq_gets_recent_brave_sources_and_exposes_attributed_urls(client, auth
     client.put('/api/cases/' + case + '/ai-consent',
                headers=auth, json={'enabled': True})
     calls = []
-    async def stub_retrieve(case, question, clues):
+    async def stub_retrieve(case, question, clues, **kwargs):
         calls.append(('brave', question))
         return {'searchedNow': True, 'sources': [{
             'url': 'https://public.example.org/community-page',

@@ -120,9 +120,8 @@ def test_geodata_normalization():
 
 
 def test_camera_metadata_normalization():
-    import pytest
-    with pytest.raises(AdapterError):
-        asyncio.run(tfl_cameras(StubClient([{'id':'x','lat':51.5,'lon':-.12,'commonName':'Road','additionalProperties':[]} ])))
+    listings=asyncio.run(tfl_cameras(StubClient([{'id':'x','lat':51.5,'lon':-.12,'commonName':'Road','additionalProperties':[]} ])))
+    assert listings[0]['observedAt'] is None and listings[0]['feedUrl'] is None
     cal=asyncio.run(caltrans_cameras(StubClient({'features':[{'attributes':{'OBJECTID':8,'latitude':34.1,'longitude':-118.2,'locationName':'LA'}}]})))
     assert cal[0]['name']=='LA'
 

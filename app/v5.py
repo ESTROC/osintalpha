@@ -85,6 +85,9 @@ class WebSearchInput(BaseModel):
     query:str|None=Field(default=None,max_length=200)
     depth:int=Field(default=2,ge=1,le=4)
     lens:Literal['general','professional','education','trade','organization']='general'
+    freshness:Literal['all','pd','pw','pm','py']='all'
+    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     consent:bool=False
 
 def make_queries(case,context,body):
@@ -150,7 +153,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             try:
                 response=await client.get('https://api.search.brave.com/res/v1/web/search',
                     params={'q':query,'count':12,'safesearch':'strict','text_decorations':'false',
-                            'result_filter':'web'},
+                            'result_filter':'web','country':body.country,'search_lang':body.search_lang,
+                            **({'freshness':body.freshness} if body.freshness!='all' else {})},
                     headers={'X-Subscription-Token':key,'Accept':'application/json'})
                 response.raise_for_status()
                 payload=response.json()
@@ -173,6 +177,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             for item in items:
                 raw={'provider':'Brave Web Search','title':item['title'],
                      'snippet':item['description'],'url':item['url'],
+                     'searchCountry':body.country,'searchLanguage':body.search_lang,
+                     'requestedFreshness':body.freshness,
                      'identity_verified':False,'page_fetched':False}
                 disposition=save_observation(conn,case_id=case_id,run_id=runid,
                     query=query,provider='brave_web',

@@ -479,6 +479,9 @@ class ChatMessage(BaseModel):
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
     brave_context:bool=False
+    freshness:Literal['all','pd','pw','pm','py']='all'
+    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     session_id:str|None=Field(default=None,max_length=64)
 
 
@@ -559,7 +562,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     live_brave={'sources':[], 'searchedNow':False}
     if body.brave_context:
         from .brave_context import retrieve
-        live_brave=await retrieve(ca,question,clues)
+        live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang)
     from .retrieval import rank_case_evidence
     selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
     records=chat_evidence(selected)
@@ -892,7 +895,7 @@ async def security_headers(req:Request,call_next):
     res.headers['X-Frame-Options']='DENY'
     res.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
     if req.url.path == '/' or req.url.path.startswith('/assets/'):
-        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com https://avatars.githubusercontent.com https://s3-eu-west-1.amazonaws.com https://gibs.earthdata.nasa.gov; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     return res
 
 
@@ -951,3 +954,7 @@ app.include_router(public_portfolio_router)
 # Single question-led search entry; routed public APIs and optional Groq planner.
 from .smart_search import router as smart_search_router
 app.include_router(smart_search_router)
+
+# Case-scoped agency toolkit on top of the existing V8 core.
+from .agency_ops import router as agency_operations_router
+app.include_router(agency_operations_router)
