@@ -310,7 +310,7 @@ def operations(actor=Depends(core.actor_from_cookie)):
     with db.connect() as c:
         aggregate=[dict(x) for x in c.execute(
             'SELECT provider,state,count(*) n,MAX(ran_at) lastAttempt FROM collection_runs GROUP BY provider,state ORDER BY provider,state LIMIT 80')]
-    return {'apiStatus':'ok','utc':core.iso_now(),'version':'8.0.0-candidate',
+    return {'apiStatus':'ok','utc':core.iso_now(),'version':'8.0.0',
             'configured':{'Brave':bool(os.getenv('BRAVE_SEARCH_API_KEY')),
                           'Groq':bool(os.getenv('GROQ_API_KEY')),
                           'TfL':bool(os.getenv('TFL_APP_KEY'))},
