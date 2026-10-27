@@ -33,7 +33,7 @@ async def lifespan(_app):
     db.init_db()
     yield
 
-app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.6.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
+app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='7.9.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
 AUTH_TRIES = {}
 SESSION_LENGTH = 60 * 60 * 8
@@ -78,7 +78,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '7.6.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    return {'ok': True, 'version': '7.9.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -947,3 +947,7 @@ app.include_router(identity_quality_router)
 # Candidate professional portfolio and analyst-controlled coarse public place preview.
 from .portfolio import router as public_portfolio_router
 app.include_router(public_portfolio_router)
+
+# Single question-led search entry; routed public APIs and optional Groq planner.
+from .smart_search import router as smart_search_router
+app.include_router(smart_search_router)

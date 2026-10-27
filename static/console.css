@@ -94,3 +94,27 @@ blockquote{margin:10px 0;border-left:2px solid var(--accent);padding:7px 12px;co
 .profile-card .meta{margin:8px 0;overflow-wrap:anywhere}
 .profile-card .page-sub{font-size:13px;overflow-wrap:anywhere}
 @media(max-width:700px){.profile-list{padding:10px;max-height:none}.profile-top{align-items:flex-start}.profile-avatar{width:52px;height:52px;min-width:52px}}
+
+
+/* V7.9 unified search entry and progressive analyst controls */
+.smart-hero{margin-bottom:22px;padding:46px 44px 39px}
+.smart-hero h1{font-size:clamp(32px,4vw,53px)}
+.smart-hero .search-box{max-width:930px}
+.smart-hero .search-box input{font-size:17px}
+.smart-consent{display:grid;gap:11px;margin-top:7px;max-width:900px}
+.smart-options,.advanced-tools,.legacy-entry,.smart-sources{border:1px solid #344156;border-radius:12px;background:#121b2a;margin:12px 0;padding:14px 16px}
+.smart-options summary,.advanced-tools summary,.legacy-entry summary,.smart-sources summary{cursor:pointer;color:#bdcbed;font-weight:700;font-size:12px}
+.smart-options[open]>.form-row{margin-top:14px}
+.smart-options .form-row+.form-row{margin-top:10px}
+.legacy-entry{margin-top:27px}.legacy-entry .hero{margin-top:15px}
+.advanced-tools{margin:-12px 0 17px;padding:10px 14px;background:#0e1725}
+.advanced-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.smart-status{margin:0 0 15px}
+.smart-status .panel-pad{display:grid;gap:10px}
+.smart-status .page-sub{margin:0}
+.smart-sources{margin:0 0 15px}
+.smart-source-list{display:grid;gap:8px;margin-top:14px}
+.smart-source{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #293953;background:#0d1625;border-radius:8px;padding:10px 12px}
+.smart-source strong{font-size:12px}.smart-source p{font-size:10px;color:#9facc2;margin:5px 0 0}
+.smart-source .text-link{font-size:11px;white-space:nowrap}
+@media(max-width:750px){.smart-hero{padding:22px 18px}.smart-hero .search-box{flex-direction:column}.smart-hero .search-box input,.smart-hero .search-box button{width:100%}.smart-source{align-items:flex-start;flex-direction:column}}

@@ -37,7 +37,7 @@ def composed_query(case: dict[str, Any], question: str, clues: dict[str, str]) -
         value = ' '.join(str(clues.get(item) or '').split())[:60]
         if value and value.casefold() not in (subject + ' ' + q).casefold():
             hints.append(value)
-    return ' '.join([subject, q] + hints)[:570]
+    return ' '.join(([q] if q.casefold().startswith(subject.casefold()) else [subject,q]) + hints)[:570]
 
 
 def parse_context(payload: dict[str, Any], *, max_sources: int = 7) -> list[dict[str, str]]:
