@@ -246,3 +246,41 @@ def get_search_plan(case_id: str, actor=Depends(core.actor_from_cookie)):
     return {'available':True,'question':result['original_question'],
             'plan':json.loads(result['plan_json']),
             'createdAt':result['created_at'],'updatedAt':result['updated_at']}
+
+class SubjectReview(BaseModel):
+    reviewed_subject:str=Field(min_length=3,max_length=160)
+    rationale:str=Field(min_length=12,max_length=400)
+    acknowledges_unverified:bool=False
+
+@router.post('/api/cases/{case_id}/search-plan/subject-review')
+def review_parsed_subject(case_id:str,body:SubjectReview,
+                          actor=Depends(core.protect)):
+    if not body.acknowledges_unverified:
+        raise HTTPException(422,'Confirm that this corrects the search target, not a verified identity.')
+    subject=words(body.reviewed_subject)
+    if len(subject)<3 or BLOCKED_LIVE_TRACKING.search(subject):
+        raise HTTPException(422,'Invalid public subject.')
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        record=conn.execute(
+            'SELECT plan_json,original_question FROM case_search_plans WHERE case_id=?',(case_id,)).fetchone()
+        if not record:raise HTTPException(404,'Search plan unavailable')
+        prior=conn.execute('SELECT COUNT(*) n FROM evidence WHERE case_id=?',(case_id,)).fetchone()['n']
+        if prior:
+            raise HTTPException(409,'This case has source results; create a new case for a corrected search target to preserve evidence lineage.')
+        plan=json.loads(record['plan_json'])
+        plan['subject']=subject
+        plan['needsClarification']=False
+        plan['clarification']=[]
+        plan['analystSubjectReview']={
+            'searchTarget':subject,'rationale':body.rationale.strip(),
+            'reviewedBy':actor['id'],'reviewedAt':core.iso_now(),
+            'identityVerified':False}
+        conn.execute('UPDATE cases SET query=? WHERE id=?',(subject,case_id))
+        conn.execute('UPDATE case_search_plans SET plan_json=?,updated_at=? WHERE case_id=?',
+            (json.dumps(plan,ensure_ascii=False),core.iso_now(),case_id))
+    core.write_audit(actor['id'],'parsed_subject_review','case',case_id,
+                     'Corrected search target; identity remains unverified')
+    return {'plan':plan,'originalQuestion':record['original_question'],
+            'identityVerified':False,
+            'notice':'Reviewed the intended search label, not actual identity ownership.'}
