@@ -267,7 +267,7 @@ def citation_overlap(case_id:str,actor=Depends(core.actor_from_cookie)):
     with db.connect() as c:
         case_record(c,case_id,actor)
         records=[dict(x) for x in c.execute(
-            "SELECT m.web_leads_json,m.evidence_ids_json FROM research_messages m JOIN research_sessions s ON s.id=m.session_id WHERE s.case_id=? AND m.role='assistant' ORDER BY m.created_at DESC LIMIT 100",(case_id,))]
+            "SELECT m.web_leads_json,m.evidence_ids_json FROM research_messages m JOIN research_sessions s ON s.id=m.session_id WHERE s.case_id=? AND m.role='assistant' AND (?='admin' OR s.owner_id=?) ORDER BY m.created_at DESC LIMIT 100",(case_id,actor['role'],actor['id']))]
     counts=Counter()
     for row in records:
         try:leads=json.loads(row['web_leads_json'] or '[]')
@@ -309,7 +309,12 @@ def operations(actor=Depends(core.actor_from_cookie)):
     import os
     with db.connect() as c:
         aggregate=[dict(x) for x in c.execute(
-            'SELECT provider,state,count(*) n,MAX(ran_at) lastAttempt FROM collection_runs GROUP BY provider,state ORDER BY provider,state LIMIT 80')]
+            """SELECT r.provider,r.state,count(*) n,MAX(r.ran_at) lastAttempt
+               FROM collection_runs r JOIN cases c ON c.id=r.case_id
+               WHERE (?='admin' OR c.created_by=? OR EXISTS
+                   (SELECT 1 FROM case_members m WHERE m.case_id=c.id AND m.user_id=?))
+               GROUP BY r.provider,r.state ORDER BY r.provider,r.state LIMIT 80""",
+            (actor['role'],actor['id'],actor['id']))]
     return {'apiStatus':'ok','utc':core.iso_now(),'version':'8.0.0',
             'configured':{'Brave':bool(os.getenv('BRAVE_SEARCH_API_KEY')),
                           'Groq':bool(os.getenv('GROQ_API_KEY')),
