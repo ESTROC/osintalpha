@@ -172,10 +172,16 @@ class AssessmentInput(BaseModel):
 @router.get('/api/cases/{case_id}/assessment')
 def assessment(case_id:str,actor=Depends(core.actor_from_cookie)):
     read_case(case_id,actor)
+    from .decision_readiness import evidence_digest
     with db.connect() as c:
         row=c.execute('SELECT * FROM case_assessments WHERE case_id=?',(case_id,)).fetchone()
-    return dict(row) if row else {'case_id':case_id,'executive_summary':'','assessment':'',
-        'limitations':'','next_actions':'','status':'open'}
+        baseline=c.execute('SELECT evidence_digest FROM assessment_review_baselines WHERE case_id=?',(case_id,)).fetchone()
+        current=(baseline['evidence_digest']==evidence_digest(c,case_id)) if baseline else None
+    result=dict(row) if row else {'case_id':case_id,'executive_summary':'',
+        'assessment':'','limitations':'','next_actions':'','status':'open'}
+    result['sourceStateCurrent']=current
+    result['requiresRereview']=(result['status']=='completed' and current is not True)
+    return result
 
 @router.put('/api/cases/{case_id}/assessment')
 def save_assessment(case_id:str,body:AssessmentInput,actor=Depends(core.protect)):
@@ -189,11 +195,15 @@ def save_assessment(case_id:str,body:AssessmentInput,actor=Depends(core.protect)
         if not claims and not queries:
             raise HTTPException(422,'Completion requires a linked source claim or a documented executed research query.')
     with db.connect() as c:
+        from .decision_readiness import evidence_digest
         c.execute('DELETE FROM case_assessments WHERE case_id=?',(case_id,))
         c.execute('INSERT INTO case_assessments VALUES (?,?,?,?,?,?,?,?)',
           (case_id,body.executive_summary.strip(),body.assessment.strip(),
            body.limitations.strip(),body.next_actions.strip(),body.status,
            actor['id'],core.iso_now()))
+        c.execute('DELETE FROM assessment_review_baselines WHERE case_id=?',(case_id,))
+        c.execute('INSERT INTO assessment_review_baselines VALUES (?,?,?,?)',
+            (case_id,evidence_digest(c,case_id),core.iso_now(),actor['id']))
     core.write_audit(actor['id'],'assessment_update','case',case_id,body.status)
     return {'ok':True,'status':body.status}
 
