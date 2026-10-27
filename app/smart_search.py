@@ -162,7 +162,7 @@ async def ai_route(question, fallback):
         is_academic = bool(re.search(
             r'\b(research|professor|scholar|scientist|university|academic|publication|orcid)\b', topic))
         is_technical = bool(re.search(
-            r'\b(cyber|security|software|developer|engineer|programming|github|coding|code)\b', topic))
+            r'\b(cybersecurity|cyber|security|software|developer|engineer|programming|github|coding|code)\b', topic))
         if not is_academic:
             compatible.difference_update({'openalex', 'crossref'})
         if not is_technical and not fallback['context'].get('public_handle'):
