@@ -8,6 +8,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+from datetime import datetime, timezone
 import re
 from typing import Literal
 
@@ -193,7 +194,8 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
         provided=words(getattr(body,key,''))
         if provided:
             plan['context'][key]=provided
-    title=('Investigation · '+question)[:140]
+    stamp=datetime.now(timezone.utc).date().isoformat()
+    title=((plan['subject'] or 'Public-source study')[:48]+' · '+question[:56]+' · '+stamp)[:140]
     values=core.CaseInput(
         title=title,subject_type=plan['subjectType'],query=plan['subject'],
         purpose=body.purpose.strip(),authority_confirmed=True,
