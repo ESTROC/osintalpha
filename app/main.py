@@ -951,3 +951,7 @@ app.include_router(public_portfolio_router)
 # Single question-led search entry; routed public APIs and optional Groq planner.
 from .smart_search import router as smart_search_router
 app.include_router(smart_search_router)
+
+# Extended scoped analyst operations; keep provider results unverified.
+from .agency_ops import router as agency_operations_router
+app.include_router(agency_operations_router)
