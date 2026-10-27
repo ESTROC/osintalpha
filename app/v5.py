@@ -19,6 +19,7 @@ from pydantic import BaseModel,Field
 from . import main as core
 from . import db
 from .lineage import save_observation
+from .search_policy import balance_results, coverage_decision
 
 router=APIRouter()
 TRUSTED_EXACT={'github.com','www.github.com','stackoverflow.com','www.stackoverflow.com',
@@ -84,6 +85,7 @@ def providers(actor=Depends(core.actor_from_cookie)):
 class WebSearchInput(BaseModel):
     query:str|None=Field(default=None,max_length=200)
     depth:int=Field(default=2,ge=1,le=4)
+    pages:int=Field(default=1,ge=1,le=3)
     lens:Literal['general','professional','education','trade','organization']='general'
     freshness:Literal['all','pd','pw','pm','py']='all'
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
@@ -150,22 +152,35 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     async with httpx.AsyncClient(timeout=16,follow_redirects=False) as client:
         for query in queries:
             state='ok';message='';items=[]
-            try:
-                response=await client.get('https://api.search.brave.com/res/v1/web/search',
-                    params={'q':query,'count':12,'safesearch':'strict','text_decorations':'false',
-                            'result_filter':'web','country':body.country,'search_lang':body.search_lang,
-                            **({'freshness':body.freshness} if body.freshness!='all' else {})},
-                    headers={'X-Subscription-Token':key,'Accept':'application/json'})
-                response.raise_for_status()
-                payload=response.json()
-                for x in payload.get('web',{}).get('results',[])[:12]:
-                    url=str(x.get('url',''))
-                    if not public_https(url):continue
-                    items.append({'title':str(x.get('title') or url)[:200],
-                                  'description':str(x.get('description') or '')[:900],
-                                  'url':url})
-            except (httpx.HTTPError,ValueError,TypeError) as exc:
-                state='error';message='Web source unavailable or provider request failed: '+type(exc).__name__
+            # Pagination is opt-in, limited by the analyst's requested pages
+            # and stopped early when there are sufficiently diverse candidate
+            # publisher hosts. This does not mean the search is exhaustive.
+            for page in range(body.pages):
+                try:
+                    response=await client.get('https://api.search.brave.com/res/v1/web/search',
+                        params={'q':query,'count':12,'offset':page,'safesearch':'strict',
+                                'text_decorations':'false','result_filter':'web',
+                                'country':body.country,'search_lang':body.search_lang,
+                                **({'freshness':body.freshness} if body.freshness!='all' else {})},
+                        headers={'X-Subscription-Token':key,'Accept':'application/json'})
+                    response.raise_for_status()
+                    payload=response.json()
+                    for x in payload.get('web',{}).get('results',[])[:12]:
+                        url=str(x.get('url',''))
+                        if not public_https(url):continue
+                        items.append({'title':str(x.get('title') or url)[:200],
+                                      'description':str(x.get('description') or '')[:900],
+                                      'url':url})
+                    decision=coverage_decision(items,queries_executed=page+1,
+                                               max_queries=body.pages)
+                    if (decision['stop'] or
+                        not payload.get('query',{}).get('more_results_available',False)):
+                        break
+                except (httpx.HTTPError,ValueError,TypeError,KeyError,AttributeError) as exc:
+                    state='error'
+                    message='Web source unavailable or provider request failed: '+type(exc).__name__
+                    break
+            items=balance_results(items,max_per_site=3,limit=36)
             if not items and state=='ok':state='empty'
             results.append((query,state,message,items))
     new=0
@@ -199,6 +214,9 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     return {'queries':[{'query':q,'status':s,'returned':len(items),'newlySaved':'See run history'} for q,s,m,items in results],
             'returned':sum(len(items) for q,s,m,items in results),'new':new,'changed':revised,
             'errors':sum(s=='error' for q,s,m,items in results),
+            'publisherHosts':len({x['url'].split('/')[2] for q,s,m,items in results for x in items}),
+            'paginationBudget':body.pages,
+            'indexScope':'Brave public index only; not a web-scale independent local index',
             'notice':'Web results are unverified candidate pages. Manually inspect original sources; do not infer identity.'}
 
 @router.post('/api/cases/{case_id}/evidence/{evidence_id}/capture')
