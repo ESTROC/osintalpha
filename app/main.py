@@ -416,10 +416,59 @@ def safe_href(raw):
     return '#'
 
 
+def report_research_appendix(case_id):
+    """Show saved AI context as an explicitly unreviewed appendix, never fact."""
+    with db.connect() as conn:
+        result=conn.execute(
+            '''SELECT m.content,m.provider,m.web_leads_json,m.created_at
+            FROM research_messages m
+            JOIN research_sessions t ON t.id=m.session_id
+            WHERE t.case_id=? AND m.role='assistant'
+            ORDER BY m.created_at DESC,m.message_index DESC LIMIT 1''',
+            (case_id,)).fetchone()
+        plan=conn.execute(
+            'SELECT original_question FROM case_search_plans WHERE case_id=?',
+            (case_id,)).fetchone()
+    if not result and not plan:
+        return ''
+    esc=html.escape
+    parts=['<h2>Search question and model output (not analyst findings)</h2>']
+    if plan:
+        parts.append('<p><b>Original question:</b> '+esc(plan['original_question'])+'</p>')
+    if result:
+        parts.append('<div class="warn"><b>UNVERIFIED AI SYNTHESIS.</b> The text below is saved research dialogue, '
+                     'not an approved factual assessment. All identity or allegation claims '
+                     'require independently reviewed source passages.</div>')
+        parts.append('<p><b>Model/mode:</b> '+esc(result['provider'])+
+                     ' • '+esc(result['created_at'])+'</p>')
+        parts.append('<p>'+esc(result['content'][:5000]).replace('\\n','<br>')+'</p>')
+        try:
+            leads=json.loads(result['web_leads_json'])
+        except (ValueError,TypeError):
+            leads=[]
+        if isinstance(leads,list):
+            distinct=set()
+            links=[]
+            for row in leads[:15]:
+                if not isinstance(row,dict):
+                    continue
+                src=safe_href(str(row.get('url') or ''))
+                if not src.startswith('https://') or src in distinct:
+                    continue
+                distinct.add(src)
+                links.append('<li><a href="'+esc(src,quote=True)+'">'+
+                             esc(str(row.get('title') or src)[:200])+'</a></li>')
+            if links:
+                parts.append('<p>Original candidate web leads (unverified):</p><ul>'+
+                             ''.join(links)+'</ul>')
+    return ''.join(parts)
+
+
 def build_html_report(case,evidence,runs):
     esc=html.escape
     rows=''.join(f'<tr><td>{esc(r["provider"])}</td><td>{esc(r["label"])}</td><td>{esc(r["summary"])}</td><td>{esc(r["status"])}</td><td><a href="{esc(safe_href(r["source_url"]),quote=True)}">Open source</a></td><td>{esc(r["fetched_at"])}</td></tr>' for r in evidence)
     failures=''.join(f'<li>{esc(r["provider"])}: {esc(r["message"])}</li>' for r in runs if r['state']=='error')
+    research_appendix=report_research_appendix(case['id'])
     return f'''<!doctype html><html><head><meta charset="utf-8"><title>Investigation Report</title>
     <style>body{{font:13px Arial,sans-serif;color:#14233f;margin:35px}}h1{{font-size:24px}}h2{{font-size:16px;margin-top:30px}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}td,th{{border:1px solid #cbd5e1;padding:8px;overflow-wrap:anywhere;vertical-align:top}}th{{background:#e6edf7}}.warn{{padding:15px;background:#fff2d9}}.muted{{color:#64748b}}a{{color:#1254ad}}@page{{size:A4 landscape;margin:14mm}}</style></head><body>
     <h1>OSINTALPHA / Investigation report</h1><p class="muted">Case ID: {esc(case['id'])} • Generated {esc(iso_now())}</p>
@@ -428,6 +477,7 @@ def build_html_report(case,evidence,runs):
     <h2>Evidence and review status ({len(evidence)} records)</h2>
     <table><thead><tr><th>Source</th><th>Candidate / record</th><th>Finding and limits</th><th>Review</th><th>Citation</th><th>Fetched UTC</th></tr></thead><tbody>{rows or '<tr><td colspan="6">No evidence collected.</td></tr>'}</tbody></table>
     <h2>Source failures / limitations</h2><ul>{failures or '<li>No recorded source errors; completeness is not guaranteed.</li>'}</ul>
+    {research_appendix}
     <p class="muted">Method: public API candidate discovery, manual evidence review, no automatic identity merging. Source links may change after collection. For sensitive real-world decisions obtain independent verification.</p></body></html>'''
 
 
@@ -479,6 +529,7 @@ class ChatMessage(BaseModel):
     history:list[ChatTurn]=Field(default_factory=list,max_length=10)
     web_search:bool=False
     brave_context:bool=False
+    save_bounded_excerpts:bool=False
     freshness:Literal['all','pd','pw','pm','py']='all'
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
@@ -517,6 +568,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     provider=body.provider or ('grok' if body.use_grok else 'local')
     if (body.web_search or body.brave_context) and provider!='groq':
         raise HTTPException(422,'Live public-web research requires GroqCloud and explicit provider selection.')
+    if body.save_bounded_excerpts and not body.brave_context:
+        raise HTTPException(422,'Bounded search excerpts can only be saved with explicit Brave context retrieval.')
     if body.brave_context and body.web_search:
         raise HTTPException(422,'Choose Brave contextual retrieval or Groq browser search for this request, not both.')
     records=chat_evidence(ev)
@@ -629,6 +682,33 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        # Separate observed candidates from confirmed person identity. Even a
+        # source with matching name, URL and exact passage is not proof that
+        # the searched person owns that profile.
+        from .evidence_gates import guard_synthesis
+        vetted=guard_synthesis(
+            response['answer'],question,ca['subject_type'],selected,
+            ca['query'],clues,has_fresh_context=bool(live_brave['sources']),
+            has_verified_quote=bool(passages),
+            needs_disambiguation=bool(response.get('needsDisambiguation')))
+        if vetted['action'] in ('abstain','candidate_only'):
+            response['answer']=vetted['answer']
+            response['evidenceIds']=[]
+            response['needsDisambiguation']=ca['subject_type']=='person'
+        response['evidenceGate']=vetted['gate']
+        response['evidenceGateAction']=vetted['action']
+        # Source-absence review gate runs AFTER the response so clarifying
+        # questions still work. Unsupported assertive narratives are withheld.
+        if (not records and not live_brave['sources'] and not body.web_search
+                and not response.get('needsDisambiguation',False)):
+            response.update({
+                'answer':('No attributable public-source record was available. '
+                          'The system cannot establish a biography, affiliation or '
+                          'allegation from this search. Absence of results is not '
+                          'proof of absence. Please provide one public identifier '
+                          'or check the original source directly.'),
+                'evidenceIds':[],'needsDisambiguation':ca['subject_type']=='person',
+                'followUp':'Which independent public source or identifying clue should be reviewed?'})
         if body.brave_context:
             from .brave_context import clean_answer_links
             response['answer']=clean_answer_links(response['answer'],live_brave['sources'],records)
@@ -640,7 +720,41 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         write_audit(actor['id'],'chat_remote','case',case_id,provider+
                     ': '+str(len(records))+' evidence records'
                     +(', live Brave sources '+str(len(live_brave['sources'])) if body.brave_context else ''))
+        response['answerQuality']={
+            'status':'unverified_source_synthesis',
+            'verifiedIdentity':False,
+            'recordCitations':len(response.get('evidenceIds') or []),
+            'braveContextSources':len(live_brave['sources']),
+            'warning':'Record IDs and indexed pages establish provenance, not factual truth or the identity of the subject.'}
         response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
+        if body.brave_context and live_brave['sources']:
+            # Persist *metadata and a one-way excerpt digest*, not copied web
+            # page text. This is a review ledger, NOT quotation verification.
+            with db.connect() as ground_db:
+                for source in live_brave['sources']:
+                    grounding_id=uid()
+                    ground_db.execute(
+                        '''INSERT INTO research_grounding
+                        (id,case_id,session_id,provider,query_text,source_url,
+                         source_title,published_at,excerpt_sha256,retrieved_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                        (grounding_id,case_id,response['sessionId'],'brave_llm_context',
+                         live_brave.get('query',question)[:570],source['url'][:600],
+                         source['title'][:200],source.get('sourceDate','')[:80],
+                         hashlib.sha256(source['snippet'].encode()).hexdigest(),iso_now()))
+                    if body.save_bounded_excerpts:
+                        # Maximum 160 visible characters. A public search-index
+                        # excerpt is not a saved page or independent fact.
+                        excerpt=' '.join(source['snippet'].split())[:160]
+                        if excerpt:
+                            ground_db.execute(
+                                '''INSERT INTO research_excerpt_samples
+                                   (id,grounding_id,case_id,source_url,excerpt_text,
+                                    excerpt_sha256,retention_basis,review_state,created_at)
+                                   VALUES (?,?,?,?,?,?,?,?,?)''',
+                                (uid(),grounding_id,case_id,source['url'],excerpt,
+                                 hashlib.sha256(excerpt.encode()).hexdigest(),
+                                 'explicit_case_analyst_opt_in','unverified_search_excerpt',iso_now()))
         return {'model':model,'provider':provider,**response,'retrieval':retrieval,'remote':True,
                 'webSearch':bool(body.web_search or body.brave_context),
                 'braveContextUsed':bool(body.brave_context),
@@ -833,6 +947,32 @@ def save_chat(case_id,actor,body,question,response,provider):
                  json.dumps(response.get('webLeads',[]) if role=='assistant' else []),iso_now(),position))
         c.execute('UPDATE research_sessions SET updated_at=? WHERE id=?',(iso_now(),session))
         return session
+
+@app.get('/api/cases/{case_id}/grounding')
+def case_source_grounding(case_id:str,actor=Depends(actor_from_cookie)):
+    """Original URLs, collection time and snippet fingerprints, not copied pages."""
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        rows=conn.execute(
+            '''SELECT session_id,provider,query_text,source_url,source_title,
+                      published_at,excerpt_sha256,retrieved_at
+               FROM research_grounding WHERE case_id=?
+               ORDER BY retrieved_at DESC LIMIT 200''',(case_id,))
+        return {'items':[dict(x) for x in rows],
+                'notice':'Indexed excerpts are unverified, source pages and identity not validated. Digests do not prove factual claims.'}
+
+
+@app.get('/api/cases/{case_id}/research-excerpts')
+def research_excerpt_samples(case_id:str,actor=Depends(actor_from_cookie)):
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        entries=conn.execute(
+            '''SELECT id,source_url,excerpt_text,excerpt_sha256,retention_basis,
+                      review_state,created_at FROM research_excerpt_samples
+               WHERE case_id=? ORDER BY created_at DESC LIMIT 80''',(case_id,))
+        return {'items':[dict(row) for row in entries],
+                'notice':'Analyst-opted-in limited index snippets; not publisher captures or verified facts.'}
+
 
 @app.get('/api/cases/{case_id}/conversations')
 def conversations(case_id:str,actor=Depends(actor_from_cookie)):
