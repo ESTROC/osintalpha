@@ -367,7 +367,8 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
+ try{const saved=await api('/api/cases/'+id+'/search-plan');if(saved.available){s.smartPlan=saved.plan;s.smartQuestion=saved.question}}catch(e){/* Legacy case; no versioned plan */}s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();if(s.conversations?.length)s.tab='assistant';render()}
 async function loadResearchState(){
  // The initial case view needs only overview, conversation and provider state.
  // Specialist modules are fetched when explicitly selected.
@@ -466,6 +467,24 @@ async function smartLaunch(form){
   const providerInfo=await api('/api/research/providers');
   s.webProviders=providerInfo;
   await Promise.all([fetchCase(),refreshCases()]);
+  if(started.plan?.subjectType==='person'&&started.plan.needsClarification&&
+     started.plan.parsed?.identity_state==='given_name_only'){
+    // The backend parser cannot distinguish this individual yet. Do not
+    // consume Brave or Groq quota or construct a namesake biography.
+    const guidance=(started.plan.clarification||[])[0]||
+       'Please provide a full name or one verified public identifier.';
+    s.smartCoverage.structured='skipped_clarification';
+    s.smartCoverage.braveIndex='skipped_clarification';
+    s.smartCoverage.braveContext='skipped_clarification';
+    s.smartCoverage.groq='skipped_clarification';
+    s.smartStage='Clarification required before external person research';
+    s.smartIssues.push(guidance);
+    s.messages=[{role:'user',text:question},{role:'assistant',
+      text:'No external provider was queried because the subject is ambiguous. '+guidance,
+      model:'Identity clarification gate'}];
+    s.provider='local';s.braveContext=false;
+    return;
+  }
   const providers=started.plan.providers||[];
   if(providers.length){
     s.smartStage='Checking '+providers.join(', ')+' public sources';render();
