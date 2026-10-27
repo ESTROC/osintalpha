@@ -272,6 +272,19 @@ CREATE TABLE IF NOT EXISTS research_grounding (
 );
 CREATE INDEX IF NOT EXISTS research_grounding_case
  ON research_grounding(case_id,retrieved_at);
+CREATE TABLE IF NOT EXISTS research_excerpt_samples(
+ id TEXT PRIMARY KEY,
+ grounding_id TEXT NOT NULL REFERENCES research_grounding(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ source_url TEXT NOT NULL,
+ excerpt_text TEXT NOT NULL,
+ excerpt_sha256 TEXT NOT NULL,
+ retention_basis TEXT NOT NULL,
+ review_state TEXT NOT NULL DEFAULT 'unverified_search_excerpt',
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_excerpt_samples_case ON research_excerpt_samples(case_id,created_at);
+
 CREATE TABLE IF NOT EXISTS case_assessments(
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',
