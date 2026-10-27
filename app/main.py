@@ -947,3 +947,7 @@ app.include_router(identity_quality_router)
 # Candidate professional portfolio and analyst-controlled coarse public place preview.
 from .portfolio import router as public_portfolio_router
 app.include_router(public_portfolio_router)
+
+# Single question-led search entry; routed public APIs and optional Groq planner.
+from .smart_search import router as smart_search_router
+app.include_router(smart_search_router)
