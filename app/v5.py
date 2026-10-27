@@ -93,6 +93,7 @@ class WebSearchInput(BaseModel):
     date_to:str|None=Field(default=None,max_length=10)
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
+    include_sourced_aliases:bool=False
     consent:bool=False
 
 def make_queries(case,context,body,original_question=''):
@@ -146,6 +147,9 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                          (case_id,)).fetchone()
         saved_plan=conn.execute('SELECT original_question FROM case_search_plans WHERE case_id=?',
                                 (case_id,)).fetchone()
+        alias_rows=[dict(x) for x in conn.execute(
+            'SELECT alias,alias_type,source_url FROM research_aliases WHERE case_id=? ORDER BY created_at DESC LIMIT 15',
+            (case_id,))]
     from .research_authorization import require_scope_if_enabled
     with db.connect() as scope_db:
         require_scope_if_enabled(scope_db,case_id)
@@ -174,6 +178,12 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     from .date_context import resolve_page_window
     page_window=resolve_page_window(search_goal,body.date_from,body.date_to,body.freshness)
     queries=make_queries(case,context,body,original_question)
+    if body.include_sourced_aliases and case['subject_type'] in ('person','organization'):
+        from .local_discovery import bounded_alias_queries
+        candidates=bounded_alias_queries(case['query'],alias_rows,include=True,limit=1)
+        # Include at most one sourced alias and preserve the primary full objective.
+        if candidates and len(queries)<4 and candidates[0].casefold() not in {q.casefold() for q in queries}:
+            queries.append(candidates[0])
     runid=core.uid()
     results=[]
     all_candidates=[]
@@ -255,6 +265,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     core.write_audit(actor['id'],'web_discovery','case',case_id,f'{len(queries)} queries, {new} saved')
     return {'originalQuestion':original_question,
             'searchGoal':search_goal,'pageDateWindow':page_window,
+            'sourcedAliasesRequested':body.include_sourced_aliases,
+            'sourcedAliasProvenIdentity':False,
             'queryOrigin':'analyst_override' if body.query else
                           ('original_question' if saved_plan else 'legacy_case_subject'),
             'originalQuestionPreserved':True,
