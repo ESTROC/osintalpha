@@ -25,7 +25,7 @@ def summarize(runs, evidence=(), expected=()):
         row = latest.get(name)
         state = str(row.get('state') or '').lower() if row else 'not_searched'
         if state not in {'ok', 'empty', 'error', 'blocked', 'unsupported',
-                         'not_configured', 'unavailable'}:
+                         'not_configured', 'unavailable', 'not_searched'}:
             state = 'unknown'
         providers.append({
             'provider': name, 'state': state,
