@@ -108,6 +108,11 @@ def acceptable_query(query,subject,context):
 
 def fallback_query(case,context,job,steps):
     prior={(s['provider'],s['query_text'].casefold()) for s in steps}
+    # Avoid repeating the first-pass search already saved by other collectors.
+    with db.connect() as conn:
+        prior.update((r['provider'],r['query_text'].casefold()) for r in conn.execute(
+            'SELECT provider,query_text FROM research_queries WHERE case_id=?',
+            (case['id'],)))
     base=plan(case,context,'thorough')
     primary=[('brave_web',case['query']+' '+str(context.get('organization') or '').strip(),
               'Broader indexed-web discovery with known organization'),
@@ -177,6 +182,10 @@ async def choose_next(case,job,steps,context):
     if fallback and fallback['provider'] in allowed:return fallback
     # Skip unsupported specialist providers without repeating earlier steps.
     prior={(x['provider'],x['query_text'].casefold()) for x in steps}
+    with db.connect() as conn:
+        prior.update((r['provider'],r['query_text'].casefold()) for r in conn.execute(
+            'SELECT provider,query_text FROM research_queries WHERE case_id=?',
+            (case['id'],)))
     for proposed in plan(case,context,'thorough'):
         if proposed.provider in allowed and (proposed.provider,proposed.query.casefold()) not in prior:
             return {'provider':proposed.provider,'query':proposed.query,'rationale':proposed.reason}
