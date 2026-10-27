@@ -24,5 +24,9 @@ services:
         value: /srv/app/instance/osintalpha.db
       - key: XAI_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: BRAVE_SEARCH_API_KEY
+        sync: false
       - key: TFL_APP_KEY
         sync: false
