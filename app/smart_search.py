@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import main as core
+from . import db
 from .brave_context import BLOCKED_LIVE_TRACKING
 from .connectors import CATALOG, valid_domain, valid_public_ip
 from .query_parse import parse_question
@@ -185,6 +186,12 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     plan=deterministic_route(question,body.subject_type)
     if body.ai_opt_in:
         plan=await ai_route(question,plan)
+    # A first name is not a unique public identity. Do not spend external
+    # model/search quota until an independent discriminating clue is entered.
+    if (plan['subjectType']=='person' and
+        plan.get('parsed',{}).get('identity_state')=='given_name_only' and
+        not (body.public_handle.strip() or body.organization.strip() or body.city.strip())):
+        raise HTTPException(422,'Clarification required: provide a full name, an official public profile/handle, or a known public organization or city before searching a person by given name alone.')
     # User-provided context overrides *inferred* text, but remains only clues.
     for key in ('city','organization','profession','public_handle'):
         provided=words(getattr(body,key,''))
@@ -197,7 +204,26 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
         purpose=body.purpose.strip(),authority_confirmed=True,
         ai_opt_in=body.ai_opt_in,**plan['context'])
     created=core.create_case(values,actor)
+    now=core.iso_now()
+    with db.connect() as conn:
+        conn.execute(
+            'INSERT INTO case_search_plans(case_id,original_question,plan_json,created_at,updated_at) VALUES (?,?,?,?,?)',
+            (created['id'],question,json.dumps(plan,ensure_ascii=False),now,now))
     return {'id':created['id'],'question':question,'plan':plan,
             'braveConfigured':bool(os.getenv('BRAVE_SEARCH_API_KEY','').strip()),
             'groqConfigured':bool(os.getenv('GROQ_API_KEY','').strip()),
             'notice':'Candidate sources and AI source choices are not proven identities.'}
+
+@router.get('/api/cases/{case_id}/search-plan')
+def get_search_plan(case_id: str, actor=Depends(core.actor_from_cookie)):
+    """Restore exact question and approved routing decisions after page reload."""
+    with db.connect() as conn:
+        core.case_or_404(conn,case_id,actor)
+        result=conn.execute(
+            'SELECT original_question,plan_json,created_at,updated_at FROM case_search_plans WHERE case_id=?',
+            (case_id,)).fetchone()
+    if result is None:
+        return {'available':False,'notice':'This case predates versioned search-plan records.'}
+    return {'available':True,'question':result['original_question'],
+            'plan':json.loads(result['plan_json']),
+            'createdAt':result['created_at'],'updatedAt':result['updated_at']}
