@@ -122,9 +122,16 @@ function caseOverview(){
  const explain='<section class="panel"><div class="panel-head"><div class="panel-title">Why sources were searched or skipped</div><span class="tag">Recorded outcomes</span></div><div class="panel-pad">'+
  ((diagnostics.executedQueries||[]).length?diagnostics.executedQueries.slice(0,12).map(x=>'<div class="plan-step"><strong>'+h(x.provider)+'</strong> · '+h(x.status)+' · '+Number(x.returned||0)+' hits<div class="meta">'+h(x.query)+'</div><small>'+h(x.message||'')+'</small></div>').join(''):'<p class="help">No recorded search calls; an unsearched source is not a no-hit result.</p>')+
  '<p class="help">'+Number((diagnostics.skippedStructuredProviders||[]).length)+' compatible or unselected structured providers were not searched. No-hit and failures cannot prove absence.</p></div></section>';
-  const candidates='<section class="panel"><div class="panel-head"><div class="panel-title">Potentially relevant source leads</div><button class="btn small subtle" data-tab="candidates">Compare identities →</button></div>'+
+  const sideBySide=(s.candidates||[]).length>1?
+ '<section class="panel"><div class="panel-head"><div class="panel-title">Distinct candidate identities · compare before linking</div><button class="btn small" data-tab="candidates">Review candidate evidence</button></div><div class="grid2">'+
+ s.candidates.slice(0,4).map(p=>'<article class="candidate-card"><div class="badge-row"><span class="tag warn">Hypothesis only</span><span class="tag">'+h(p.classification||'unresolved')+'</span></div><h3>'+h(p.display_name||'Unknown candidate')+'</h3><p class="help">'+h((p.reason||'No review rationale')?.slice(0,220))+'</p>'+
+ '<div class="meta">'+Number((p.sources||[]).length)+' linked public candidate sources</div>'+
+ (p.sources||[]).slice(0,4).map(x=>'<div class="item-sub">'+h(x.provider)+' · '+h(x.status)+' · '+h(x.label||'Source')+'</div>').join('')+
+ '<p class="help">No identity verified by display name or shared username.</p></article>').join('')+
+ '</div></section>': '';
+ const candidates='<section class="panel"><div class="panel-head"><div class="panel-title">Potentially relevant source leads</div><button class="btn small subtle" data-tab="candidates">Compare identities →</button></div>'+
  (useful.length?useful.map(x=>'<div class="item-row"><div class="row-main"><div class="item-title">'+h(x.label)+'</div><div class="item-sub">'+h(x.provider)+' · matched public clues: '+h(x.signals.join(', ')||'none')+'</div></div><button data-go-evidence="'+h(x.id)+'" class="btn small">Inspect</button></div>').join(''):'<div class="empty">No source records presently match supplied public clues. Do not assume the target has no online presence.</div>')+'</section>';
- return header+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+explain;
+ return header+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+sideBySide+explain;
 }
 
 function caseInvestigate(){
