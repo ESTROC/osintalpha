@@ -87,15 +87,16 @@ def public_portfolio(case_id: str, actor=Depends(core.actor_from_cookie)):
         if not isinstance(raw, dict):
             raw = {}
         source_kind = classify_url(row['source_url'])
-        if row['provider'] == 'brave_web' and source_kind == 'other_public_page':
-            # Keep search results in Evidence without turning a random article
-            # into a person's profile card.
-            continue
+        # Generic web pages are also useful public leads for students, trades,
+        # community events and local services. Keep them visibly separate from
+        # actual profile/account metadata; never claim they represent this person.
         parsed = attributes(row)
         photo = safe_github_avatar(raw.get('avatar_url')) if row['provider'] == 'github' else ''
         website = str(raw.get('blog') or '')[:250] if row['provider'] == 'github' else ''
         candidate = {
-            'evidenceId': row['id'], 'platform': source_kind if row['provider'] == 'brave_web' else row['provider'],
+            'evidenceId': row['id'], 'platform': ('public_web_lead' if source_kind == 'other_public_page' else source_kind)
+                        if row['provider'] == 'brave_web' else row['provider'],
+            'isProfileAccount': row['provider'] != 'brave_web' or source_kind != 'other_public_page',
             'sourceProvider': row['provider'], 'sourceUrl': row['source_url'],
             'displayName': parsed['name'] or row['label'],
             'organization': parsed['organization'], 'publishedLocation': parsed['location'],
@@ -104,7 +105,7 @@ def public_portfolio(case_id: str, actor=Depends(core.actor_from_cookie)):
             'summary': row['summary'][:420], 'reviewStatus': row['status'],
             'retrievedAt': row['fetched_at'], 'clues': rank_against_clues(parsed, context),
             'identityVerified': False,
-            'note': ('Search result only; the destination has not been retrieved or verified.'
+            'note': ('Search lead only; it is not necessarily a profile or a record about the case subject. Original page not verified.'
                      if row['provider'] == 'brave_web'
                      else 'Publisher metadata about a candidate account; ownership has not been verified.')
         }

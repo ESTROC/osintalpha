@@ -11,6 +11,7 @@ import json
 import os
 import re
 from html.parser import HTMLParser
+from typing import Literal
 from urllib.parse import urlsplit
 import httpx
 from fastapi import APIRouter,Depends,HTTPException
@@ -83,6 +84,7 @@ def providers(actor=Depends(core.actor_from_cookie)):
 class WebSearchInput(BaseModel):
     query:str|None=Field(default=None,max_length=200)
     depth:int=Field(default=2,ge=1,le=4)
+    lens:Literal['general','professional','education','trade','organization']='general'
     consent:bool=False
 
 def make_queries(case,context,body):
@@ -103,14 +105,27 @@ def make_queries(case,context,body):
     quoted='"'+base.replace('"','').strip()[:130]+'"'
     narrowing='"'+(org or city).replace('"','').strip()[:60]+'"' if (org or city) else ''
     queries=[context_query] if distinct else [base]
+    lens=getattr(body,'lens','professional')
     if case['subject_type']=='person':
-        queries.append('site:linkedin.com/in/ '+quoted+' '+narrowing)
-        queries.append('site:github.com '+(('"'+handle.replace('"','')+'"') if handle else quoted)+' '+narrowing)
-        queries.append(quoted+' '+narrowing+' (portfolio OR CV OR research OR biography)')
+        if lens=='education':
+            queries.extend([quoted+' '+narrowing+' school OR college OR university',
+                            quoted+' '+narrowing+' public project OR scholarship OR competition',
+                            quoted+' '+narrowing+' public activity OR publication'])
+        elif lens=='trade':
+            queries.extend([quoted+' '+narrowing+' trade OR service OR business listing',
+                            quoted+' '+narrowing+' shop OR contractor OR license',
+                            quoted+' '+narrowing+' public events OR professional association'])
+        elif lens=='professional':
+            queries.extend(['site:linkedin.com/in/ '+quoted+' '+narrowing,
+                            'site:github.com '+(('"'+handle.replace('"','')+'"') if handle else quoted)+' '+narrowing,
+                            quoted+' '+narrowing+' (portfolio OR CV OR research OR biography)'])
+        else:
+            queries.extend([quoted+' '+narrowing+' public information',
+                            quoted+' '+narrowing+' community OR business OR event',
+                            quoted+' '+narrowing+' public profile OR interview OR directory'])
     elif case['subject_type']=='organization':
-        queries.append(quoted+' official website')
-        queries.append(quoted+' registration OR legal entity')
-        queries.append('site:linkedin.com/company/ '+quoted)
+        queries.extend([quoted+' official website',quoted+' registration OR legal entity',
+                        'site:linkedin.com/company/ '+quoted])
     else:
         queries.append(base)
     return list(dict.fromkeys(' '.join(q.split())[:200] for q in queries))[:body.depth]
