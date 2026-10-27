@@ -416,10 +416,59 @@ def safe_href(raw):
     return '#'
 
 
+def report_research_appendix(case_id):
+    """Show saved AI context as an explicitly unreviewed appendix, never fact."""
+    with db.connect() as conn:
+        result=conn.execute(
+            '''SELECT m.content,m.provider,m.web_leads_json,m.created_at
+            FROM research_messages m
+            JOIN research_sessions t ON t.id=m.session_id
+            WHERE t.case_id=? AND m.role='assistant'
+            ORDER BY m.created_at DESC,m.message_index DESC LIMIT 1''',
+            (case_id,)).fetchone()
+        plan=conn.execute(
+            'SELECT original_question FROM case_search_plans WHERE case_id=?',
+            (case_id,)).fetchone()
+    if not result and not plan:
+        return ''
+    esc=html.escape
+    parts=['<h2>Search question and model output (not analyst findings)</h2>']
+    if plan:
+        parts.append('<p><b>Original question:</b> '+esc(plan['original_question'])+'</p>')
+    if result:
+        parts.append('<div class="warn"><b>UNVERIFIED AI SYNTHESIS.</b> The text below is saved research dialogue, '
+                     'not an approved factual assessment. All identity or allegation claims '
+                     'require independently reviewed source passages.</div>')
+        parts.append('<p><b>Model/mode:</b> '+esc(result['provider'])+
+                     ' • '+esc(result['created_at'])+'</p>')
+        parts.append('<p>'+esc(result['content'][:5000]).replace('\\n','<br>')+'</p>')
+        try:
+            leads=json.loads(result['web_leads_json'])
+        except (ValueError,TypeError):
+            leads=[]
+        if isinstance(leads,list):
+            distinct=set()
+            links=[]
+            for row in leads[:15]:
+                if not isinstance(row,dict):
+                    continue
+                src=safe_href(str(row.get('url') or ''))
+                if not src.startswith('https://') or src in distinct:
+                    continue
+                distinct.add(src)
+                links.append('<li><a href="'+esc(src,quote=True)+'">'+
+                             esc(str(row.get('title') or src)[:200])+'</a></li>')
+            if links:
+                parts.append('<p>Original candidate web leads (unverified):</p><ul>'+
+                             ''.join(links)+'</ul>')
+    return ''.join(parts)
+
+
 def build_html_report(case,evidence,runs):
     esc=html.escape
     rows=''.join(f'<tr><td>{esc(r["provider"])}</td><td>{esc(r["label"])}</td><td>{esc(r["summary"])}</td><td>{esc(r["status"])}</td><td><a href="{esc(safe_href(r["source_url"]),quote=True)}">Open source</a></td><td>{esc(r["fetched_at"])}</td></tr>' for r in evidence)
     failures=''.join(f'<li>{esc(r["provider"])}: {esc(r["message"])}</li>' for r in runs if r['state']=='error')
+    research_appendix=report_research_appendix(case['id'])
     return f'''<!doctype html><html><head><meta charset="utf-8"><title>Investigation Report</title>
     <style>body{{font:13px Arial,sans-serif;color:#14233f;margin:35px}}h1{{font-size:24px}}h2{{font-size:16px;margin-top:30px}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}td,th{{border:1px solid #cbd5e1;padding:8px;overflow-wrap:anywhere;vertical-align:top}}th{{background:#e6edf7}}.warn{{padding:15px;background:#fff2d9}}.muted{{color:#64748b}}a{{color:#1254ad}}@page{{size:A4 landscape;margin:14mm}}</style></head><body>
     <h1>OSINTALPHA / Investigation report</h1><p class="muted">Case ID: {esc(case['id'])} • Generated {esc(iso_now())}</p>
@@ -428,6 +477,7 @@ def build_html_report(case,evidence,runs):
     <h2>Evidence and review status ({len(evidence)} records)</h2>
     <table><thead><tr><th>Source</th><th>Candidate / record</th><th>Finding and limits</th><th>Review</th><th>Citation</th><th>Fetched UTC</th></tr></thead><tbody>{rows or '<tr><td colspan="6">No evidence collected.</td></tr>'}</tbody></table>
     <h2>Source failures / limitations</h2><ul>{failures or '<li>No recorded source errors; completeness is not guaranteed.</li>'}</ul>
+    {research_appendix}
     <p class="muted">Method: public API candidate discovery, manual evidence review, no automatic identity merging. Source links may change after collection. For sensitive real-world decisions obtain independent verification.</p></body></html>'''
 
 
