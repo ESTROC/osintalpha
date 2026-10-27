@@ -86,6 +86,7 @@ class WebSearchInput(BaseModel):
     query:str|None=Field(default=None,max_length=200)
     depth:int=Field(default=2,ge=1,le=4)
     pages:int=Field(default=1,ge=1,le=3)
+    adaptive:bool=False
     lens:Literal['general','professional','education','trade','organization']='general'
     freshness:Literal['all','pd','pw','pm','py']='all'
     country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
@@ -149,6 +150,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     queries=make_queries(case,context,body)
     runid=core.uid()
     results=[]
+    all_candidates=[]
+    stop_reason='planned_queries_exhausted'
     async with httpx.AsyncClient(timeout=16,follow_redirects=False) as client:
         for query in queries:
             state='ok';message='';items=[]
@@ -183,6 +186,14 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             items=balance_results(items,max_per_site=3,limit=36)
             if not items and state=='ok':state='empty'
             results.append((query,state,message,items))
+            all_candidates.extend(items)
+            if body.adaptive:
+                coverage=coverage_decision(all_candidates,queries_executed=len(results),
+                                           max_queries=len(queries),
+                                           provider_error=bool(state=='error'))
+                if coverage['stop'] and coverage['reason']!='query_budget_exhausted':
+                    stop_reason=coverage['reason']
+                    break
     new=0
     revised=0
     with db.connect() as conn:
@@ -216,6 +227,10 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             'errors':sum(s=='error' for q,s,m,items in results),
             'publisherHosts':len({x['url'].split('/')[2] for q,s,m,items in results for x in items}),
             'paginationBudget':body.pages,
+            'plannedQueries':len(queries),
+            'executedQueries':len(results),
+            'stopReason':stop_reason,
+            'coverage':coverage_decision(all_candidates,queries_executed=len(results),max_queries=len(queries)),
             'indexScope':'Brave public index only; not a web-scale independent local index',
             'notice':'Web results are unverified candidate pages. Manually inspect original sources; do not infer identity.'}
 
