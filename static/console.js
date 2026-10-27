@@ -44,7 +44,7 @@ function casePage(){const c=s.case?.case;if(!c)return '<div class="empty">Loadin
 
 function casePortfolio(){
  const p=s.portfolio||{},records=p.items||[],city=p.contextCity||'';
- const intro='<div class="analyst-intro"><div><div class="eyebrow">PUBLIC PROFESSIONAL RECORDS · CANDIDATES ONLY</div><h2>Attributable profile portfolio</h2><p>Discover potential professional accounts, inspect each original and manually resolve namesakes. No records or photos are automatically confirmed as belonging to the investigated person.</p></div><button class="btn small" data-profile-search  >Discover more profiles</button></div>';
+ const intro='<div class="analyst-intro"><div><div class="eyebrow">PUBLIC-SOURCE RECORDS · CANDIDATES ONLY</div><h2>Attributable research portfolio</h2><p>Find public leads relevant to the question—students, tradespeople, community participants, researchers or companies—not only employment profiles. Inspect each source and separate namesakes. No records or photos are automatically confirmed as belonging to the investigated person.</p></div><label class="field-label">Discovery focus <select id="profile-lens"><option value="general">General public information</option><option value="trade">Trades, services and local business</option><option value="education">Education and public activities</option><option value="professional">Professional profiles</option></select></label><button class="btn small" data-profile-search>Search selected focus</button></div>';
  const warnings='<div class="callout warn">This is a candidate portfolio, NOT a verified biography. An account photo shows the source account image, not confirmed identification. LinkedIn items come from public search snippets, without restricted LinkedIn profile access.</div>';
  const mapPanel='<section class="panel panel-pad"><h3>Public location clue</h3><p class="page-sub">Only your supplied city or region can be mapped. The map never pinpoints a person, home or current location.</p>'+
  (city?'<div class="badge-row"><span class="tag">'+h(city)+'</span></div><button class="btn small" data-profile-map>Preview public city map</button>':'<p class="help">Add a city or region in the Overview clues to enable a map preview.</p>')+
@@ -384,7 +384,8 @@ else if(t.dataset.tab){s.tab=t.dataset.tab;if(s.tab==='portfolio')s.portfolio=aw
 else if(t.hasAttribute('data-profile-search')){
  if(!s.webProviders?.web?.configured)throw Error('Set BRAVE_SEARCH_API_KEY privately in Render before searching professional public web.');
  if(typeof window.confirm==='function'&&!window.confirm('Send this case subject and public context clues to Brave Search (up to four searches)? Results will be saved as unverified leads.'))return;
- const out=await api('/api/cases/'+s.id+'/web-discovery',{method:'POST',body:{depth:4,consent:true}});
+ const focus=document.getElementById('profile-lens')?.value||'general';
+ const out=await api('/api/cases/'+s.id+'/web-discovery',{method:'POST',body:{depth:4,lens:focus,consent:true}});
  await fetchCase();s.portfolio=await api('/api/cases/'+s.id+'/public-portfolio');
  render();toast(out.returned+' public web leads returned, '+out.new+' newly saved, '+out.errors+' provider errors.',out.errors>0);
 }
