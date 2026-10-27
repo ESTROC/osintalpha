@@ -266,6 +266,25 @@ def get_case(case_id:str, actor=Depends(actor_from_cookie)):
     return {'case':case,'context':dict(context) if context else {},'evidence':evidence,'runs':runs}
 
 
+@app.get('/api/cases/{case_id}/source-completeness')
+def source_completeness(case_id:str,actor=Depends(actor_from_cookie)):
+    """Source-run truthfulness; no inference that an unsearched subject is absent."""
+    from .source_completeness import summarize
+    with db.connect() as conn:
+        case_or_404(conn,case_id,actor)
+        runs=[dict(x) for x in conn.execute(
+            'SELECT provider,state,result_count,message,ran_at FROM collection_runs '
+            'WHERE case_id=? ORDER BY ran_at DESC LIMIT 500',(case_id,))]
+        evidence=[dict(x) for x in conn.execute(
+            'SELECT status FROM evidence WHERE case_id=?',(case_id,))]
+        plan=conn.execute('SELECT plan_json FROM case_search_plans WHERE case_id=?',(case_id,)).fetchone()
+    try:
+        expected=json.loads(plan['plan_json']).get('providers',[]) if plan else []
+    except (ValueError,TypeError):
+        expected=[]
+    return summarize(runs,evidence,expected)
+
+
 @app.delete('/api/cases/{case_id}')
 def delete_case(case_id:str,actor=Depends(protect)):
     with db.connect() as c:
