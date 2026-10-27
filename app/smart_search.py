@@ -205,6 +205,8 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     public_clue=any(words(getattr(body,k,'')) for k in ('organization','public_handle','city'))
     if public_clue:plan['needsClarification']=False
     if body.ai_opt_in and not plan['needsClarification']:
+        from .research_safety import require_safe_remote_query
+        require_safe_remote_query(question,plan['subjectType'])
         plan=await ai_route(question,plan)
     plan['deferExternalSearch']=bool(plan['needsClarification'])
     # Do not falsely reject public event/business questions that a heuristic

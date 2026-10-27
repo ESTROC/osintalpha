@@ -147,6 +147,8 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
     from .research_authorization import require_scope_if_enabled
     with db.connect() as scope_db:
         require_scope_if_enabled(scope_db,case_id)
+    from .research_safety import require_safe_remote_query
+    require_safe_remote_query((body.query or (saved_plan['original_question'] if saved_plan else case['query'])),case['subject_type'])
     if not body.consent:
         raise HTTPException(422,'Explicit consent is required before sending research queries to Brave Web Search.')
     key=os.getenv('BRAVE_SEARCH_API_KEY','').strip()

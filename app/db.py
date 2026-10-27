@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS research_messages (
  created_at TEXT NOT NULL, message_index INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS research_messages_session ON research_messages(session_id,created_at);
+CREATE TABLE IF NOT EXISTS research_response_snapshots(
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+ assistant_message_id TEXT NOT NULL UNIQUE REFERENCES research_messages(id) ON DELETE CASCADE,
+ snapshot_json TEXT NOT NULL,content_sha256 TEXT NOT NULL,created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS response_snapshots_case
+ ON research_response_snapshots(case_id,created_at);
 CREATE TABLE IF NOT EXISTS search_history (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),search_query TEXT NOT NULL,
