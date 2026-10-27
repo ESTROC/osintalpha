@@ -214,6 +214,11 @@ def signoff(case_id:str,body:SignoffInput,actor=Depends(core.protect)):
         ass=c.execute('SELECT executive_summary,limitations FROM case_assessments WHERE case_id=?',(case_id,)).fetchone()
         if body.decision=='reviewed_with_limitations' and (pending or not ass or not ass['executive_summary'] or not ass['limitations']):
             raise HTTPException(422,'Resolve disputed evidence and complete assessment limitations before signoff.')
+        if body.decision=='reviewed_with_limitations':
+            from .decision_readiness import evidence_digest
+            baseline=c.execute('SELECT evidence_digest FROM assessment_review_baselines WHERE case_id=?',(case_id,)).fetchone()
+            if not baseline or baseline['evidence_digest']!=evidence_digest(c,case_id):
+                raise HTTPException(409,'Assessment must be re-reviewed and saved after source changes before a current signoff.')
         digest=review_digest(c,case_id)
         ident=core.uid()
         c.execute('INSERT INTO case_signoffs VALUES (?,?,?,?,?,?,?)',

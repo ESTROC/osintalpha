@@ -78,7 +78,13 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '8.0.0', 'database': 'postgres' if db.is_postgres() else 'sqlite', 'utc': iso_now()}
+    git_revision=os.getenv('RENDER_GIT_COMMIT','').strip()
+    if not re.fullmatch(r'[a-fA-F0-9]{40}',git_revision):git_revision=''
+    return {'ok': True, 'version': '8.0.0',
+            'revision':git_revision or None,
+            'revisionSource':'render_git_metadata' if git_revision else 'unavailable',
+            'database': 'postgres' if db.is_postgres() else 'sqlite',
+            'utc': iso_now()}
 
 
 @app.post('/api/auth/login')
@@ -1191,6 +1197,10 @@ app.include_router(public_portfolio_router)
 from .smart_search import router as smart_search_router
 app.include_router(smart_search_router)
 
+# Objective sufficiency is independent of workflow completion and result volume.
+from .decision_readiness import router as decision_readiness_router
+app.include_router(decision_readiness_router)
+
 # Case-scoped agency toolkit on top of the existing V8 core.
 from .agency_ops import router as agency_operations_router
 app.include_router(agency_operations_router)
@@ -1206,6 +1216,10 @@ app.include_router(case_authorization_router)
 # Explicit public trade leads, registry reference workflow and sourced alias hypotheses.
 from .local_discovery import router as business_discovery_router
 app.include_router(business_discovery_router)
+
+# Source-linked typed public identifiers, candidate graph, no automatic identity merge.
+from .entity_graph import router as entity_graph_router
+app.include_router(entity_graph_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
