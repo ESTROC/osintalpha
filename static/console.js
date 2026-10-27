@@ -469,16 +469,16 @@ async function smartLaunch(form){
   const providerInfo=await api('/api/research/providers');
   s.webProviders=providerInfo;
   await Promise.all([fetchCase(),refreshCases()]);
-  if(started.plan?.deferExternalSearch){
+  if(started.plan?.deferExternalSearch || (started.plan?.subjectType==='person' && started.plan?.needsClarification)){
     const prompt=started.plan.clarification||'Provide an identifying public clue before searching a single given name.';
     s.smartStage='Clarification required before external research';
     s.smartIssues.push(prompt);
-    s.smartCoverage.structured='skipped';
-    s.smartCoverage.braveIndex='skipped';
-    s.smartCoverage.braveContext='skipped';
-    s.smartCoverage.groq='skipped';
+    s.smartCoverage.structured='skipped clarification';
+    s.smartCoverage.braveIndex='skipped clarification';
+    s.smartCoverage.braveContext='skipped clarification';
+    s.smartCoverage.groq='skipped clarification';
     s.messages=[{role:'user',text:question},{role:'assistant',text:prompt+
-      ' This is a search-target clarification, not proof of identity.',model:'Source planner'}];
+      ' No external provider was queried. This is a search-target clarification, not proof of identity.',model:'Source planner'}];
     s.provider='local';
     return;
   }
