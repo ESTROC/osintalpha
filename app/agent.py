@@ -196,6 +196,8 @@ async def choose_next(case,job,steps,context):
 
 async def execute_provider(case,job,choice,actor_id,step_no):
     provider=choice['provider'];query=choice['query']
+    from .research_safety import require_safe_remote_query
+    require_safe_remote_query(query,case['subject_type'])
     run_id=job['id']+'-'+str(step_no)
     if provider=='brave_web':
         # Internal invocation preserves V5 consent, source filtering, query audit and versioning.
