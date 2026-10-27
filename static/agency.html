@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSINT Alpha — Advanced Agency Tools</title><link rel="stylesheet" href="/assets/console.css">
+<style>
+.agency-shell{max-width:1160px;margin:0 auto;padding:26px 18px 100px}
+.agency-top{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.agency-hero{border:1px solid #33445d;background:linear-gradient(125deg,#182237,#0e1725);padding:25px;border-radius:16px;margin-bottom:18px}
+.agency-hero h1{font-size:30px;letter-spacing:-.7px;margin:0 0 8px}
+.agency-hero p{font-size:13px;color:#a6b8d0;line-height:1.6}
+.agency-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.agency-grid section{min-width:0;padding:18px;border:1px solid #303b50;border-radius:13px;background:#101824}
+.agency-grid h2{margin:0 0 8px;font-size:17px}
+.agency-grid .help{margin:6px 0 14px}
+.agency-grid form{display:grid;gap:9px}
+.agency-grid form button{justify-self:start}
+.agency-grid .wide{grid-column:1 / -1}
+.agency-tools{display:flex;gap:8px;flex-wrap:wrap}
+.agency-tools button{white-space:normal}
+.agency-output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:430px;overflow:auto;border:1px solid #304057;padding:15px;border-radius:10px;background:#0a111e;color:#bdd0e8;font:12px/1.65 'IBM Plex Mono',monospace}
+.agency-row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.agency-error{color:#f3a0a4}.agency-ok{color:#8cddba}
+.agency-source{border:1px solid #2d3b54;border-radius:9px;padding:12px;display:grid;gap:5px;margin:8px 0}
+.agency-source strong{font-size:12px}.agency-source small{color:#94a5c0}
+kbd{font:11px monospace;border:1px solid #46536a;border-radius:5px;padding:2px 6px}
+@media(max-width:780px){.agency-grid{grid-template-columns:1fr}.agency-grid .wide{grid-column:auto}}
+</style></head>
+<body><main class="agency-shell">
+<div class="agency-top"><div class="brand" style="padding:0"><div class="brand-symbol">A</div><div><div class="brand-name">OSINT ALPHA</div><div class="brand-meta">ADVANCED ANALYST WORKSPACE</div></div></div>
+<a class="btn" href="/">Return to investigations</a></div>
+<div class="agency-hero">
+<h1>Research operations and review</h1>
+<p>Manage source-linked aliases, public relationships, timelines, verification tasks, reviewed exports and research recipes. Unverified internet results do not establish any person's identity. This workspace requires your existing analyst session and case access.</p>
+<div class="agency-row"><label style="flex:1;min-width:240px">Case ID<input id="agency-case" autocomplete="off" placeholder="Open an existing authorized case ID"></label>
+<button class="btn primary" id="agency-open">Open case</button></div>
+<p><span id="agency-status" class="muted">Choose a case to begin.</span> · <kbd>Ctrl</kbd>+<kbd>K</kbd> search commands</p>
+</div>
+<div class="agency-grid">
+<section><h2>Saved research procedures</h2><p class="help">Reusable templates, scoped to your account. Select one to prepare a search—no automatic call is sent.</p>
+<div id="recipe-options"></div>
+<form id="recipe-form"><input name="title" maxlength="90" minlength="4" required placeholder="Recipe title">
+<textarea name="question" maxlength="280" minlength="12" required placeholder="Research question / operator pattern"></textarea>
+<input name="description" maxlength="240" placeholder="Scope and source restrictions">
+<button class="btn">Save procedure</button></form>
+</section>
+<section><h2>Case identity aliases</h2><p class="help">Attach original-source context; aliases remain unverified until reviewed.</p>
+<form id="alias-form"><input name="alias" minlength="2" maxlength="160" required placeholder="Published alternative name or handle">
+<select name="alias_type"><option value="alternative_name">Alternative name</option><option value="transliteration">Transliteration</option><option value="brand">Brand / trade name</option><option value="former_name">Former name</option><option value="known_public_handle">Published handle</option></select>
+<input name="source_url" placeholder="https://publisher.example/source (optional)">
+<textarea name="rationale" maxlength="700" minlength="12" required placeholder="Why the source might be relevant; uncertainty"></textarea>
+<button class="btn">Save unverified alias</button></form>
+</section>
+<section><h2>Sourced entity relationships</h2><p class="help">A proposed edge is not verified ownership, employment or affiliation.</p>
+<form id="relationship-form"><input name="left_name" minlength="2" required placeholder="Public entity or account A">
+<input name="right_name" minlength="2" required placeholder="Public entity or account B">
+<input name="relationship" minlength="3" required placeholder="Published relationship label">
+<input name="evidence_id" required placeholder="Existing source evidence ID in this case">
+<textarea name="rationale" minlength="20" required placeholder="Exact public-source reason and limitations"></textarea>
+<button class="btn">Create proposed relationship</button></form>
+</section>
+<section><h2>Publication and review dates</h2><p class="help">Publisher observation dates remain distinct from the date our system retrieved the source.</p>
+<div class="agency-tools"><button class="btn" data-action="timeline">Timeline</button><button class="btn" data-action="methodology">Methodology</button><button class="btn" data-action="overlap">Citation reuse</button><button class="btn" data-action="metrics">Case workload</button></div>
+</section>
+<section><h2>Evidence pagination and relevance</h2><p class="help">Review manageable groups rather than loading all case records.</p>
+<div class="agency-tools"><button class="btn" id="page-previous">Previous</button><button class="btn" id="page-next">Next</button></div>
+<div id="agency-page" class="muted" style="margin:10px 0">No case loaded.</div><div id="agency-evidence"></div>
+</section>
+<section><h2>Verification queue</h2><p class="help">Propose tasks for unreviewed/disputed sources; batch updates cannot mark tasks as verified or complete.</p>
+<div class="agency-tools"><button class="btn" data-action="suggest-tasks">Suggest up to five review tasks</button><button class="btn" data-action="tasks">Show tasks</button></div>
+</section>
+<section><h2>Reports and client-export safety</h2>
+<p class="help">Preview what would be included and record an explicit review decision. Client sharing still requires human/legal approval.</p>
+<div class="agency-tools"><button class="btn" data-action="preview">Redacted preview</button><button class="btn" data-action="pack">Reviewable evidence JSON</button><button class="btn" data-action="signoffs">Signoff history</button></div>
+<form id="signoff-form">
+<select name="decision"><option value="not_approved">Not approved for distribution</option><option value="reviewed_with_limitations">Reviewed with limitations</option></select>
+<textarea name="note" minlength="30" maxlength="1500" required placeholder="Identity checks, unresolved questions, limitations and intended audience"></textarea>
+<button class="btn">Record review decision</button></form>
+</section>
+<section><h2>Compare authorized investigations</h2><p class="help">Compare repeated source URLs without inferring the cases concern the same individual.</p>
+<form id="compare-form"><input name="right" placeholder="Second authorized case ID" required>
+<button class="btn">Compare public source overlap</button></form>
+</section>
+<section class="wide"><div class="agency-row"><div><h2>Actions and source output</h2><p class="help">Original-source URLs and review state; never a verified person profile.</p></div><button class="btn" id="agency-clear">Clear output</button></div><div id="agency-output" class="agency-output" role="status" aria-live="polite">No action selected.</div></section>
+</div>
+</main><script src="/assets/agency.js" defer></script></body></html>
