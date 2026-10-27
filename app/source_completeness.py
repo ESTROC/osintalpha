@@ -51,7 +51,23 @@ def summarize(runs, evidence=(), expected=()):
         outcome = 'no_hits_in_attempted_sources'
     else:
         outcome = 'no_saved_relevant_evidence'
+    # Source absence, disagreement, rejection and unsupported are different
+    # review outcomes; none proves the subject does or does not exist.
+    distinctions = {
+        'notSearched':unsearched,
+        'providerFailed':failed,
+        'providerNoHits':state_counts.get('empty',0),
+        'unreviewedCandidate':findings.get('candidate',0),
+        'analystCorroboratedNotIndependentProof':findings.get('corroborated',0),
+        'analystDisputed':findings.get('disputed',0),
+        'analystRejected':findings.get('rejected',0),
+        'wrongIdentityIndependentlyProven':0,
+        'claimUnsupportedIndependentlyProven':0,
+    }
     return {
+        'distinctions':distinctions,
+        'wrongIdentityVerified':False,
+        'sourceNotFoundDoesNotMeanWrongIdentity':True,
         'outcome': outcome,
         'providerStates': providers,
         'providerCounts': state_counts,
