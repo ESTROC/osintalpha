@@ -118,3 +118,75 @@ blockquote{margin:10px 0;border-left:2px solid var(--accent);padding:7px 12px;co
 .smart-source strong{font-size:12px}.smart-source p{font-size:10px;color:#9facc2;margin:5px 0 0}
 .smart-source .text-link{font-size:11px;white-space:nowrap}
 @media(max-width:750px){.smart-hero{padding:22px 18px}.smart-hero .search-box{flex-direction:column}.smart-hero .search-box input,.smart-hero .search-box button{width:100%}.smart-source{align-items:flex-start;flex-direction:column}}
+
+
+/* V8 analyst experience: restrained orbital mission-control styling, responsive and functional. */
+html,body,#app{width:100%;min-width:0;max-width:100%}
+body{overflow-x:clip}
+.shell,.workspace,.main,.hero,.smart-hero,.mission-map,.ai-layout{min-width:0;max-width:100%}
+.main{padding:clamp(17px,3.1vw,42px);max-width:1480px}
+.smart-hero{
+  padding:clamp(24px,4.6vw,68px);
+  border:1px solid rgba(143,165,213,.34);
+  background:radial-gradient(ellipse at 84% 12%,rgba(67,106,177,.22),transparent 37%),
+    radial-gradient(ellipse at 4% 94%,rgba(33,73,136,.15),transparent 45%),
+    linear-gradient(125deg,#0c1423 2%,#111d30 60%,#09121f);
+  overflow:hidden;isolation:isolate;position:relative
+}
+.smart-hero::before{
+ content:"";position:absolute;pointer-events:none;width:min(58vw,610px);aspect-ratio:1;
+ right:-16%;top:-48%;border:1px solid rgba(164,189,236,.13);border-radius:50%;
+ box-shadow:0 0 0 85px rgba(82,128,190,.025),0 0 0 171px rgba(82,128,190,.02)
+}
+.smart-hero::after{
+ right:0;left:auto;top:0;width:100%;height:100%;transform:none;mask-image:none;
+ background-image:radial-gradient(circle,rgba(178,203,245,.55) 0.7px,transparent 1px);
+ background-size:57px 57px;background-position:10px 20px;opacity:.11
+}
+.smart-hero>*{position:relative;z-index:1}
+.smart-hero h1,.hero.smart-hero h1{font-size:clamp(28px,3.65vw,51px);line-height:1.13;
+  font-weight:700;letter-spacing:-.052em;margin:14px 0 18px;max-width:900px;
+  overflow-wrap:break-word}
+.smart-hero h1 span{color:#a8bbfc}
+.smart-hero .desc,.hero.smart-hero .desc{
+  color:#abbad0;font-size:clamp(12px,1.08vw,15px);line-height:1.75;max-width:690px;
+  margin:0 0 30px;overflow-wrap:anywhere
+}
+.smart-hero .search-box{max-width:940px;background:#070f1c;border:1px solid #647794;
+  padding:6px;border-radius:13px;box-shadow:0 20px 55px rgba(0,0,0,.2)}
+.smart-hero .search-box input{font-size:clamp(13px,1.2vw,17px);background:transparent}
+.smart-hero .field-label{font-size:12px;letter-spacing:.015em}
+.smart-hero .smart-consent{gap:9px;max-width:940px;margin-top:12px}
+.smart-hero .check{font-size:12px;color:#bdc8d8;overflow-wrap:anywhere}
+.smart-hero .check input{margin-top:1px}
+.smart-hero .smart-options{max-width:940px;border:1px solid #304058;background:#101c2c}
+.smart-options[open] .form-row{min-width:0}
+.smart-hero .help{font-size:11px;color:#91a2ba;margin:0}
+.mission-map{display:grid;grid-template-columns:minmax(240px,.75fr) minmax(0,1.3fr);
+  overflow:hidden;min-height:318px;margin:18px 0 24px;border-color:#30445c;
+  background:linear-gradient(130deg,#101b2c,#0d1523)}
+.mission-meta{display:flex;flex-direction:column;justify-content:center;gap:12px;
+  padding:clamp(22px,2.65vw,38px);min-width:0}
+.mission-meta h2{font-size:clamp(20px,2.4vw,30px);font-weight:650;letter-spacing:-.03em;margin:0}
+.mission-meta p{font-size:12px;line-height:1.7;color:#9eafc8;max-width:360px;margin:0}
+.mission-meta .meta{color:#7891b5;font:10px var(--mono);margin-top:12px}
+.mission-map-view{min-height:318px;height:100%;background:#07111d;min-width:0;z-index:0}
+.mission-map-view .leaflet-container{background:#081626}
+.smart-source{min-width:0;overflow-wrap:anywhere}
+.smart-source strong{overflow-wrap:anywhere}
+.smart-status .tag{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.ai-layout{grid-template-columns:minmax(0,1.35fr) minmax(260px,.8fr)}
+.ai-layout>section,.ai-layout>aside{min-width:0}
+.intel-map-panel{display:grid;grid-template-columns:minmax(190px,.7fr) minmax(0,1.3fr);
+  border:1px solid #30445c;border-radius:14px;overflow:hidden;margin:0 0 17px;background:#101929}
+.intel-map-panel .intel-map-explainer{padding:20px 22px;display:flex;flex-direction:column;gap:10px;justify-content:center}
+.intel-map-panel p{color:#a1aec3;font-size:12px;line-height:1.6;margin:0}
+.intel-map-panel .map{height:235px;border-radius:0}
+.mission-map .leaflet-control-attribution,.intel-map-panel .leaflet-control-attribution{font-size:10px}
+@media(max-width:1180px){.ai-layout{grid-template-columns:1fr}.mission-map{grid-template-columns:minmax(200px,.8fr) 1.15fr}}
+@media(max-width:790px){.mission-map,.intel-map-panel{grid-template-columns:1fr}.mission-map-view{min-height:270px;height:270px}
+ .intel-map-panel .map{height:255px}.smart-hero .search-box{flex-direction:column;align-items:stretch}
+ .smart-hero .search-box input{width:100%;min-width:0}.smart-hero .search-box .btn{width:100%}
+ .smart-hero .form-row{grid-template-columns:1fr}.smart-hero{padding:25px 18px}
+ .hero.smart-hero h1{font-size:clamp(26px,7vw,43px)}}
+@media (prefers-reduced-motion:reduce){.smart-hero *, .mission-map *{animation:none!important;transition:none!important}}
