@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from . import main as core
 from .brave_context import BLOCKED_LIVE_TRACKING
 from .connectors import CATALOG, valid_domain, valid_public_ip
+from .search_policy import plan_question,permitted_sources,question_type
 
 router = APIRouter()
 
@@ -81,22 +82,24 @@ def deterministic_route(question, explicit_type=None):
     # Do not turn example words or topics into assertions about this subject.
     # Clues are supplied by the analyst or copied literally by the opt-in planner.
     ctx = {'city':'','organization':'','profession':'','public_handle':''}
-    if kind == 'domain':
-        providers=['dns']
-    elif kind=='ip':
-        providers=['internetdb']
-    elif kind=='organization':
-        providers=['gleif','wikidata','gdelt']
-    elif re.search(r'\b(research|professor|academic|publication|scholar|scientist|orcid)\b', lower):
-        providers=['openalex','crossref']
-    elif re.search(r'\b(cyber|software|programming|github|engineer|developer|code)\b', lower):
-        providers=['github','gdelt'] if len(subject.split())>=2 and subject.casefold()!=q.casefold() else []
-    elif len(subject.split())>=2 and subject.casefold()!=q.casefold():
-        providers=['gdelt','wikipedia']
-    else:
-        providers=[]  # Web index is broader for ambiguous/non-professional queries.
+    policy=plan_question(q,kind,CATALOG)
+    providers=policy['providers']
+    # The query is a search target hypothesis, not a verified name or job.
+    # Preserve the original question independently of any tentative subject.
+    if kind=='person' and policy['parsed']['subject_text']:
+        subject=policy['parsed']['subject_text'][:160]
+    elif kind=='person':
+        subject=q[:160]
     return {'subjectType':kind,'subject':subject,'context':ctx,
             'providers':providers,
+            'questionType':policy['questionType'],
+            'searchLens':policy['searchLens'],
+            'parsed':policy['parsed'],
+            'needsClarification':policy['needsClarification'],
+            'clarification':policy['clarification'],
+            'originalQuery':policy['originalQuery'],
+            'queryVariants':policy['variants'],
+            'sourcePolicy':policy['sourcePolicy'],
             'strategy':'Deterministic relevance routing; broad Brave web context if enabled',
             'aiPlanned':False,
             'caveat':'Subject classification and all person/name matches are tentative.'}
@@ -153,17 +156,8 @@ async def ai_route(question, fallback):
         or (kind=='ip' and not valid_public_ip(subject))):
         subject = fallback['subject']
         kind = fallback['subjectType']
-    compatible = {c.id for c in CATALOG if kind in c.scope}
-    if kind == 'person':
-        topic = question.casefold()
-        is_academic = bool(re.search(
-            r'\b(research|professor|scholar|scientist|university|academic|publication|orcid)\b', topic))
-        is_technical = bool(re.search(
-            r'\b(cybersecurity|cyber|security|software|developer|engineer|programming|github|coding|code)\b', topic))
-        if not is_academic:
-            compatible.difference_update({'openalex', 'crossref'})
-        if not is_technical and not fallback['context'].get('public_handle'):
-            compatible.difference_update({'github', 'stackoverflow'})
+    task=question_type(question,kind)
+    compatible=set(permitted_sources(kind,task,CATALOG))
     proposals = data.get('providers')
     selected = [p for p in proposals if p in allowed and p in compatible] if isinstance(proposals,list) else []
     chosen = list(dict.fromkeys(selected))[:3]
@@ -174,6 +168,14 @@ async def ai_route(question, fallback):
             clues[field]=value
     return {'subjectType':kind,'subject':subject,'context':clues,
             'providers':chosen,
+            'questionType':task,
+            'searchLens':fallback.get('searchLens','general'),
+            'parsed':fallback.get('parsed',{}),
+            'needsClarification':fallback.get('needsClarification',False),
+            'clarification':fallback.get('clarification',''),
+            'originalQuery':question,
+            'queryVariants':fallback.get('queryVariants',[question]),
+            'sourcePolicy':fallback.get('sourcePolicy','explicit task utility'),
             'strategy':'Groq-assisted allowed-source routing; Brave discovery separate',
             'aiPlanned':True,
             'caveat':'Source planning is not identity verification.'}
@@ -187,8 +189,13 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     if BLOCKED_LIVE_TRACKING.search(question):
         raise HTTPException(422,'Searching for private residential or real-time person locations is unsupported.')
     plan=deterministic_route(question,body.subject_type)
-    if body.ai_opt_in:
+    # A single given name is not a reliable search target; no expensive
+    # remote AI planning before a distinguishing public clue is supplied.
+    public_clue=any(words(getattr(body,k,'')) for k in ('organization','public_handle','city'))
+    if public_clue:plan['needsClarification']=False
+    if body.ai_opt_in and not plan['needsClarification']:
         plan=await ai_route(question,plan)
+    plan['deferExternalSearch']=bool(plan['needsClarification'])
     # User-provided context overrides *inferred* text, but remains only clues.
     for key in ('city','organization','profession','public_handle'):
         provided=words(getattr(body,key,''))
