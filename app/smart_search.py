@@ -50,6 +50,18 @@ def looks_name(query):
     return parse_question(query).subject_text[:160]
 
 
+def public_discovery_lens(question):
+    """Select an index search lens by stated question, never by assumed identity."""
+    q=words(question).casefold()
+    if re.search(r'\b(plumb(?:er|ing)|electrician|repair|shop|contractor|vendor|salon|trade|service provider|local business|restaurant)\b',q):
+        return 'trade'
+    if re.search(r'\b(student|school|college|campus|education|scholarship|competition|university admission|sports event)\b',q):
+        return 'education'
+    if re.search(r'\b(github|linkedin|software developer|engineer|cv|portfolio|employment history)\b',q):
+        return 'professional'
+    return 'general'
+
+
 def deterministic_route(question, explicit_type=None):
     q = words(question)
     lower = q.casefold()
@@ -88,6 +100,7 @@ def deterministic_route(question, explicit_type=None):
     person_q = kind == 'person'
     return {'subjectType':kind,'subject':subject,'context':ctx,
             'providers':providers,
+            'discoveryLens':public_discovery_lens(q),
             'strategy':'Deterministic relevance routing; broad Brave web context if enabled',
             'aiPlanned':False,
             'parsed':parsed.as_dict(),
@@ -168,6 +181,7 @@ async def ai_route(question, fallback):
             clues[field]=value
     return {'subjectType':kind,'subject':subject,'context':clues,
             'providers':chosen,
+            'discoveryLens':public_discovery_lens(question),
             'strategy':'Groq-assisted allowed-source routing; Brave discovery separate',
             'aiPlanned':True,
             # Parser output and clarification state come from the deterministic
