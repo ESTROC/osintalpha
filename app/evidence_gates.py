@@ -94,7 +94,7 @@ def guard_synthesis(answer,question,subject_type,rows,subject='',context=None,
         return {'action':'clarify','answer':answer,'gate':gate}
     no_usable=cover['questionRelevant']==0 and not has_fresh_context and not has_verified_quote
     if no_usable:
-        return {'action':'abstain','answer':'Insufficient attributable evidence to answer this question. No verified conclusion about the subject is available. Source absence is not evidence of absence. Please supply a distinguishing public source or identifier.','gate':gate}
+        return {'action':'abstain','answer':'No attributable public-source record supports this answer. No verified conclusion about the subject is available. Source absence is not evidence of absence. Please supply a distinguishing public source or identifier.','gate':gate}
     if subject_type=='person':
         return {'action':'candidate_only','answer':'Public-source candidates were found, but the intended person is not independently identified. Review the original sources and distinguish namesakes before stating a biography, employer or allegation.','gate':gate}
     # A text quote is only proof of text presence, never proof of account ownership.
