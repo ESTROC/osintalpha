@@ -157,6 +157,16 @@ async def ai_route(question, fallback):
         subject = fallback['subject']
         kind = fallback['subjectType']
     compatible = {c.id for c in CATALOG if kind in c.scope}
+    if kind == 'person':
+        topic = question.casefold()
+        is_academic = bool(re.search(
+            r'\b(research|professor|scholar|scientist|university|academic|publication|orcid)\b', topic))
+        is_technical = bool(re.search(
+            r'\b(cyber|security|software|developer|engineer|programming|github|coding|code)\b', topic))
+        if not is_academic:
+            compatible.difference_update({'openalex', 'crossref'})
+        if not is_technical and not fallback['context'].get('public_handle'):
+            compatible.difference_update({'github', 'stackoverflow'})
     proposals = data.get('providers')
     selected = [p for p in proposals if p in allowed and p in compatible] if isinstance(proposals,list) else []
     chosen = list(dict.fromkeys(selected))[:3]
