@@ -256,6 +256,22 @@ CREATE TABLE IF NOT EXISTS verified_excerpts(
 );
 CREATE INDEX IF NOT EXISTS verified_excerpts_case ON verified_excerpts(case_id,created_at);
 
+CREATE TABLE IF NOT EXISTS case_search_plans (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ original_question TEXT NOT NULL, plan_json TEXT NOT NULL,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_grounding (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ session_id TEXT REFERENCES research_sessions(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL, query_text TEXT NOT NULL,
+ source_url TEXT NOT NULL, source_title TEXT NOT NULL,
+ published_at TEXT NOT NULL DEFAULT '',
+ excerpt_sha256 TEXT NOT NULL, retrieved_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS research_grounding_case
+ ON research_grounding(case_id,retrieved_at);
 CREATE TABLE IF NOT EXISTS case_assessments(
  case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
  executive_summary TEXT NOT NULL DEFAULT '',assessment TEXT NOT NULL DEFAULT '',
