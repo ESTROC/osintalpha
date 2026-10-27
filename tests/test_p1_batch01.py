@@ -128,7 +128,7 @@ def test_034_035_cross_engine_requires_consent_and_preserves_caveat(client,auth,
         user=c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
     actor={'id':user['id'],'role':'admin'}
     sid=main.save_chat(case,actor,main.ChatMessage(
-        question='Public source claims','provider':'groq'),
+        question='Public source claims',provider='groq'),
         'Public source claims',{
         'answer':'Unverified public source found',
         'evidenceIds':[],
