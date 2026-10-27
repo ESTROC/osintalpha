@@ -612,7 +612,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         payload={'model':model,'input':messages,'max_output_tokens':1600,'store':False}
         endpoint='https://api.x.ai/v1/responses'
     try:
-        async with httpx.AsyncClient(timeout=45,follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=35 if body.brave_context else 45,follow_redirects=False) as client:
             resp=await client.post(endpoint,json=payload,
                         headers={'Authorization':f'Bearer {key}'})
             resp.raise_for_status()
