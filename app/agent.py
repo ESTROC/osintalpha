@@ -108,6 +108,11 @@ def acceptable_query(query,subject,context):
 
 def fallback_query(case,context,job,steps):
     prior={(s['provider'],s['query_text'].casefold()) for s in steps}
+    # Avoid repeating the first-pass search already saved by other collectors.
+    with db.connect() as conn:
+        prior.update((r['provider'],r['query_text'].casefold()) for r in conn.execute(
+            'SELECT provider,query_text FROM research_queries WHERE case_id=?',
+            (case['id'],)))
     base=plan(case,context,'thorough')
     primary=[('brave_web',case['query']+' '+str(context.get('organization') or '').strip(),
               'Broader indexed-web discovery with known organization'),
@@ -177,6 +182,10 @@ async def choose_next(case,job,steps,context):
     if fallback and fallback['provider'] in allowed:return fallback
     # Skip unsupported specialist providers without repeating earlier steps.
     prior={(x['provider'],x['query_text'].casefold()) for x in steps}
+    with db.connect() as conn:
+        prior.update((r['provider'],r['query_text'].casefold()) for r in conn.execute(
+            'SELECT provider,query_text FROM research_queries WHERE case_id=?',
+            (case['id'],)))
     for proposed in plan(case,context,'thorough'):
         if proposed.provider in allowed and (proposed.provider,proposed.query.casefold()) not in prior:
             return {'provider':proposed.provider,'query':proposed.query,'rationale':proposed.reason}
@@ -288,3 +297,38 @@ def recover_job(case_id:str,job_id:str,actor=Depends(core.protect)):
             ('completed' if performed>=job['max_steps'] else 'ready',performed,core.iso_now(),job_id))
     core.write_audit(actor['id'],'job_recover','case',case_id,job_id)
     return job_detail(case_id,job_id,actor)
+
+class BoundedRun(BaseModel):
+    steps:int=Field(default=2,ge=1,le=2)
+    consent:bool=False
+
+@router.post('/api/cases/{case_id}/jobs/{job_id}/run-bounded')
+async def run_bounded(case_id:str,job_id:str,body:BoundedRun,
+                      actor=Depends(core.protect)):
+    """Two-step maximum, resumable multi-source query refinement.
+
+    This endpoint never merges identity candidates or declares results complete.
+    The existing per-step audit and failure recovery are reused.
+    """
+    if not body.consent:
+        raise HTTPException(422,'Explicit research-step consent is required.')
+    _,job,_=read_job(case_id,job_id,actor)
+    if job['status'] not in ('ready','completed'):
+        raise HTTPException(409,'Research job must be ready or already completed.')
+    executed=[]
+    result=job_detail(case_id,job_id,actor)
+    for _ in range(body.steps):
+        if result['status']=='completed':
+            break
+        prior=result['completedSteps']
+        result=await run_step(case_id,job_id,actor)
+        if result['completedSteps']==prior:
+            break
+        step=result['steps'][-1]
+        executed.append(step)
+        # Continuing after provider failure can waste quota or hide outages.
+        if step['status'] not in ('ok','empty'):
+            break
+    return {'job':result,'executedSteps':executed,
+            'complete':result['status']=='completed',
+            'note':'Executed auditable bounded source steps; results remain unverified candidates.'}
