@@ -184,7 +184,15 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     if BLOCKED_LIVE_TRACKING.search(question):
         raise HTTPException(422,'Searching for private residential or real-time person locations is unsupported.')
     plan=deterministic_route(question,body.subject_type)
-    if body.ai_opt_in:
+    # Explicit analyst-supplied context can narrow a search but never
+    # constitutes identity verification or lets an LLM assert an affiliation.
+    provided_clue=any(words(getattr(body,key,'')) for key in
+                      ('organization','city','public_handle'))
+    if provided_clue and plan['subjectType']=='person':
+        plan['needsClarification']=False
+    # Unresolved first-name candidates must not automatically consume Groq
+    # routing quota or be treated as an identified person.
+    if body.ai_opt_in and not plan.get('needsClarification'):
         plan=await ai_route(question,plan)
     # Do not falsely reject public event/business questions that a heuristic
     # parser mistakes for names. Keep the advisory clarification state instead;
