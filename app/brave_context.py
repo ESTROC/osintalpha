@@ -120,3 +120,18 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
                    'They are not independently verified source-page captures, '
                    'identity matches, live whereabouts, or confirmed claims.')
     }
+
+
+def clean_answer_links(answer: str, sources: list[dict[str, str]],
+                       records: list[dict[str, str]]) -> str:
+    """Remove unsupported model-generated Markdown link targets.
+
+    This checks *link existence in retrieved source IDs*, not truth or entailment.
+    """
+    allowed = {x['url'] for x in sources if x.get('url')}
+    allowed.update(str(row.get('url') or '') for row in records)
+    def replace_link(match: re.Match) -> str:
+        title, href = match.group(1), match.group(2)
+        return match.group(0) if href in allowed else title + ' [unverified link omitted]'
+    return re.sub(r'\[([^\]]{1,200})\]\((https?://[^)\s]{1,700})\)',
+                  replace_link, answer)
