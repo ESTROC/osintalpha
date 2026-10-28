@@ -1373,6 +1373,10 @@ app.include_router(provider_ops_router)
 from .account_security import router as account_security_router
 app.include_router(account_security_router)
 
+# Preview-only allowlisted search operators.
+from .advanced_queries import router as advanced_queries_router
+app.include_router(advanced_queries_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
