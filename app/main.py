@@ -1344,6 +1344,10 @@ app.include_router(candidate_refinement_router)
 from .reviewed_report import router as reviewed_report_router
 app.include_router(reviewed_report_router)
 
+# Auditable external-call reservations and observed provider health.
+from .provider_ops import router as provider_ops_router
+app.include_router(provider_ops_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
