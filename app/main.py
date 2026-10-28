@@ -1466,6 +1466,10 @@ app.include_router(report_distribution_router)
 from .case_presentation import router as case_presentation_router
 app.include_router(case_presentation_router)
 
+# Independently reviewed export with explicit field suppression and audited PDF/HTML/JSON.
+from .export_controls import router as export_controls_router
+app.include_router(export_controls_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
