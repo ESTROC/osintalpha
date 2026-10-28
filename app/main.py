@@ -1450,6 +1450,10 @@ app.include_router(case_initial_router)
 from .report_distribution import router as report_distribution_router
 app.include_router(report_distribution_router)
 
+# Evidence-state guidance and short editable case labels without altering original objective.
+from .outcome_guidance import router as outcome_guidance_router
+app.include_router(outcome_guidance_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
