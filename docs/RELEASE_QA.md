@@ -1,3 +1,5 @@
+> Historical v1.0.0 QA record, not current release acceptance. Refer to [Post-152 operational acceptance](POST152_OPERATIONAL_ACCEPTANCE_20261029.md).
+
 # Release QA Summary — OSINT Alpha Workbench v1.0.0
 
 ## Automated checks completed
