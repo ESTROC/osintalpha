@@ -1385,6 +1385,10 @@ app.include_router(provider_governance_router)
 from .alias_validity import router as alias_validity_router
 app.include_router(alias_validity_router)
 
+# Case-bound human-reviewed original/translation with exact source offsets.
+from .translation_capture import router as translation_capture_router
+app.include_router(translation_capture_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)

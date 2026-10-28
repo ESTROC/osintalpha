@@ -475,6 +475,19 @@ CREATE TABLE IF NOT EXISTS alias_validity_reviews (
  review_state TEXT NOT NULL,review_rationale TEXT NOT NULL,
  reviewed_at TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS translation_capture_reviews (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT NOT NULL REFERENCES source_captures(id) ON DELETE CASCADE,
+ source_sha256 TEXT NOT NULL,
+ source_start INTEGER NOT NULL,source_end INTEGER NOT NULL,
+ original_text TEXT NOT NULL,translated_text TEXT NOT NULL,
+ language_from TEXT NOT NULL,language_to TEXT NOT NULL,
+ method TEXT NOT NULL,method_version TEXT NOT NULL,
+ caveat TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS translation_capture_reviews_case ON translation_capture_reviews(case_id,reviewed_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
