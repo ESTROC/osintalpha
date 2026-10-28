@@ -24,8 +24,10 @@ services:
         value: /srv/app/instance/osintalpha.db
       - key: XAI_API_KEY
         sync: false
+      # Optional private inference key; case-level consent and provider quotas apply.
       - key: GROQ_API_KEY
         sync: false
+      # Optional private Brave Search key; no default public web API entitlement.
       - key: BRAVE_SEARCH_API_KEY
         sync: false
       - key: TFL_APP_KEY

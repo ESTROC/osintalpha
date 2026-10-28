@@ -16,6 +16,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,Field
+from .release import configured_groq_model
 from . import db
 from . import main as core
 from . import v4,v5
@@ -157,7 +158,7 @@ async def ai_proposed_step(case,context,job,steps,allowed):
         async with httpx.AsyncClient(timeout=13,follow_redirects=False) as client:
             result=await client.post('https://api.groq.com/openai/v1/chat/completions',
                headers={'Authorization':'Bearer '+os.environ['GROQ_API_KEY']},
-               json={'model':os.getenv('GROQ_MODEL','openai/gpt-oss-120b'),
+               json={'model':configured_groq_model(),
                      'messages':[{'role':'system','content':sys},
                                  {'role':'user','content':json.dumps(state,ensure_ascii=False)}],
                      'temperature':0,'response_format':{'type':'json_object'},
@@ -208,7 +209,9 @@ async def execute_provider(case,job,choice,actor_id,step_no):
                 'changed':out.get('changed',0),'message':'' if not out['errors'] else 'External web provider unavailable'}
     async with httpx.AsyncClient(timeout=16,headers={
         'User-Agent':'OSINTAlpha/7.0 controlled-investigation-research'},follow_redirects=False) as client:
-        records=await core.collect_one(provider,query,case['subject_type'],client)
+        from .provider_reliability import cached_collection
+        records=await cached_collection(case['id'],provider,query,case['subject_type'],
+                                        runner=core.collect_one,client=client)
     new=0;changed=0
     with db.connect() as c:
         for record in records[:50]:

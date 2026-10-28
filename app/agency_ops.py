@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .release import VERSION
 from . import db
 from . import main as core
 from .connectors import CATALOG
@@ -329,7 +330,7 @@ def operations(actor=Depends(core.actor_from_cookie)):
                    (SELECT 1 FROM case_members m WHERE m.case_id=c.id AND m.user_id=?))
                GROUP BY r.provider,r.state ORDER BY r.provider,r.state LIMIT 80""",
             (actor['role'],actor['id'],actor['id']))]
-    return {'apiStatus':'ok','utc':core.iso_now(),'version':'8.0.0',
+    return {'apiStatus':'ok','utc':core.iso_now(),'version':VERSION,
             'configured':{'Brave':bool(os.getenv('BRAVE_SEARCH_API_KEY')),
                           'Groq':bool(os.getenv('GROQ_API_KEY')),
                           'TfL':bool(os.getenv('TFL_APP_KEY'))},
@@ -491,16 +492,38 @@ async def provider_canary(body:CanaryInput,actor=Depends(core.protect)):
         count=len(results)
     except Exception as exc:
         status='error';note='Provider request unsuccessful: '+type(exc).__name__;count=0
+    from .provider_reliability import classify_error
+    # A provider can be empty without being offline. No raw exception, API key or source query is stored.
+    classification=('compatible_response' if status=='ok' else 'empty_response' if status=='empty' else 'provider_failure')
+    with db.connect() as record_db:
+        record_db.execute('INSERT INTO provider_contract_canaries VALUES (?,?,?,?,?,?,?)',
+            (core.uid(),body.provider,status,classification,count,core.iso_now(),actor['id']))
     core.write_audit(actor['id'],'provider_canary','source',body.provider,status)
-    return {'provider':body.provider,'status':status,'candidateCount':count,
+    return {'provider':body.provider,'status':status,'classification':classification,
+            'recordedForMonitoring':True,'candidateCount':count,
             'checkedAt':core.iso_now(),'sampleQuery':query,'message':note,
             'notice':'Manual live connectivity check only; this does not verify relevance, coverage, uptime or an identity match.'}
+
+@router.get('/api/research/provider-canary-history')
+def canary_history(actor=Depends(core.actor_from_cookie)):
+    core.admin_only(actor)
+    with db.connect() as conn:
+        rows=[dict(x) for x in conn.execute(
+           'SELECT provider,outcome,classification,candidate_count,checked_at '
+           'FROM provider_contract_canaries ORDER BY checked_at DESC,id DESC LIMIT 100')]
+    return {'items':rows,'continuousUptimeMeasured':False,
+            'scheduledLiveChecks':False,
+            'warning':'Only explicitly consented fixed-query provider canaries are recorded. Neither results nor synthetic tests establish uptime or identity accuracy.'}
+
 
 @router.get('/api/research/model-configuration')
 def model_configuration(actor=Depends(core.actor_from_cookie)):
     import os
-    model=os.getenv('GROQ_MODEL','openai/gpt-oss-120b')
-    return {'provider':'Groq','model':model,'configured':bool(os.getenv('GROQ_API_KEY')),
-            'toolModes':['structured_output','browser_search_separate'],
-            'validation':'configured only, not a live model capability probe',
-            'testedAgainst':'Mocked API and CI model fixtures; real-model release acceptance still required.'}
+    from .release import model_manifest
+    status=model_manifest()
+    status.update({'provider':'Groq','model':status['configuredModel'],
+                   'configured':bool(os.getenv('GROQ_API_KEY')),
+                   'toolModes':['structured_output','browser_search_separate'],
+                   'validation':'synthetic request-shape fixtures only',
+                   'testedAgainst':'CI simulated modes; live upstream QA still required.'})
+    return status

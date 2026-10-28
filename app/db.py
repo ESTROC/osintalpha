@@ -529,6 +529,20 @@ CREATE TABLE IF NOT EXISTS licensed_satellite_observations (
  review_actor TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS satellite_case_idx ON licensed_satellite_observations(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS provider_case_cache (
+ cache_key TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,query_text TEXT NOT NULL,subject_type TEXT NOT NULL,
+ adapter_version TEXT NOT NULL,result_json TEXT NOT NULL,
+ stored_at BIGINT NOT NULL,expires_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS provider_case_cache_case ON provider_case_cache(case_id,expires_at);
+CREATE TABLE IF NOT EXISTS provider_contract_canaries (
+ id TEXT PRIMARY KEY,provider TEXT NOT NULL,
+ outcome TEXT NOT NULL,classification TEXT NOT NULL,
+ candidate_count INTEGER NOT NULL,checked_at TEXT NOT NULL,
+ checked_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS provider_canary_history ON provider_contract_canaries(provider,checked_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
