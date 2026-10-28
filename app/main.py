@@ -1482,6 +1482,10 @@ app.include_router(case_review_operations_router)
 from .public_status import router as public_status_router
 app.include_router(public_status_router)
 
+# Protected release acceptance checks, not a production compliance certificate.
+from .release_readiness import router as release_readiness_router
+app.include_router(release_readiness_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
