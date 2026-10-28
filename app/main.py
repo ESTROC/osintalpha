@@ -1263,6 +1263,10 @@ app.include_router(claim_support_router)
 from .source_trust import router as source_trust_router
 app.include_router(source_trust_router)
 
+# Explainable source recency and nonprobabilistic review utility dimensions.
+from .source_quality import router as source_quality_router
+app.include_router(source_quality_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
