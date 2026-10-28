@@ -1415,6 +1415,10 @@ app.include_router(public_event_graph_router)
 from .media_governance import router as media_governance_router
 app.include_router(media_governance_router)
 
+# Case-scoped rights-attested entity crosswalk, defensive connector preview and original source metadata.
+from .source_contracts import router as source_contracts_router
+app.include_router(source_contracts_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
