@@ -130,9 +130,15 @@ function caseOverview(){
  (p.sources||[]).slice(0,4).map(x=>'<div class="item-sub">'+h(x.provider)+' · '+h(x.status)+' · '+h(x.label||'Source')+'</div>').join('')+
  '<p class="help">No identity verified by display name or shared username.</p></article>').join('')+
  '</div></section>': '';
- const candidates='<section class="panel"><div class="panel-head"><div class="panel-title">Potentially relevant source leads</div><button class="btn small subtle" data-tab="candidates">Compare identities →</button></div>'+
+ const counterSources=(ins.evidence||[]).filter(x=>x.status==='rejected'||x.status==='disputed').slice(0,8);
+ const excludedPeople=(s.candidates||[]).filter(x=>x.classification==='excluded').slice(0,6);
+ const counterPanel='<section class="panel"><div class="panel-head"><div class="panel-title">Counter-evidence and explicitly excluded namesakes</div><span class="tag warn">Review before attribution</span></div>'+
+ (counterSources.length?counterSources.map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.label)+'</strong><div class="item-sub">'+h(x.status)+' · '+h((x.reviewer_notes||'Reason pending review').slice(0,300))+'</div></div><button class="btn small" data-go-evidence="'+h(x.id)+'">Inspect</button></div>').join(''):'<div class="empty">No rejected or disputed source records documented. This does not mean the candidate has no contradicting evidence.</div>')+
+ (excludedPeople.length?excludedPeople.map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.display_name)+'</strong><div class="item-sub">Excluded candidate hypothesis · '+h((x.reason||'Unspecified review').slice(0,240))+'</div></div></div>').join(''):'')+
+ '<div class="panel-pad"><p class="help">Excluded namesakes and contradictory records must remain visible; none independently establishes a person identity.</p></div></section>';
+  const candidates='<section class="panel"><div class="panel-head"><div class="panel-title">Potentially relevant source leads</div><button class="btn small subtle" data-tab="candidates">Compare identities →</button></div>'+
  (useful.length?useful.map(x=>'<div class="item-row"><div class="row-main"><div class="item-title">'+h(x.label)+'</div><div class="item-sub">'+h(x.provider)+' · matched public clues: '+h(x.signals.join(', ')||'none')+'</div></div><button data-go-evidence="'+h(x.id)+'" class="btn small">Inspect</button></div>').join(''):'<div class="empty">No source records presently match supplied public clues. Do not assume the target has no online presence.</div>')+'</section>';
- return header+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+sideBySide+explain;
+ return header+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+counterPanel+sideBySide+explain;
 }
 
 function caseInvestigate(){
