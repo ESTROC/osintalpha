@@ -1438,6 +1438,10 @@ app.include_router(custody_export_router)
 from .analyst_governance import router as analyst_governance_router
 app.include_router(analyst_governance_router)
 
+# Analyst outcome latency metrics and source-origin independence review.
+from .review_metrics import router as review_metrics_router
+app.include_router(review_metrics_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
