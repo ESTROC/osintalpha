@@ -1267,6 +1267,10 @@ app.include_router(source_trust_router)
 from .source_quality import router as source_quality_router
 app.include_router(source_quality_router)
 
+# Source-quoted, candidate-specific public affiliations with unknown verification.
+from .affiliation_history import router as affiliation_history_router
+app.include_router(affiliation_history_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
