@@ -512,6 +512,22 @@ def build_html_report(case,evidence,runs):
     rows=''.join(f'<tr><td>{esc(r["provider"])}</td><td>{esc(r["label"])}</td><td>{esc(r["summary"])}</td><td>{esc(r["status"])}</td><td><a href="{esc(safe_href(r["source_url"]),quote=True)}">Open source</a></td><td>{esc(r["fetched_at"])}</td></tr>' for r in evidence)
     failures=''.join(f'<li>{esc(r["provider"])}: {esc(r["message"])}</li>' for r in runs if r['state']=='error')
     research_appendix=report_research_appendix(case['id'])
+    from .claim_support import index as report_claim_index
+    with db.connect() as report_conn:
+        support=report_claim_index(report_conn,case['id'])
+    annotated=[]
+    for item in support['items']:
+        state=item['claimBindingState']
+        proof=item['quoteEvidence'][0] if item['quoteEvidence'] else None
+        quote=('“'+html.escape(proof['quoteText'][:400])+'”' if proof else
+               'No exact quotation bound to this claim.')
+        annotated.append('<li><b>'+html.escape(item['claim'][:500])+'</b> — '+
+            html.escape(state)+' — '+quote+
+            ' <a href="'+html.escape(safe_href(item['originalSourceUrl']),quote=True)+
+            '">Original source</a></li>')
+    claim_section='<h2>Claim quotations and binding gaps</h2><p>Source quote presence does not prove authorship, claim truth, or intended identity. '
+    claim_section+='All material assertions require independent review.</p><ul>'+(
+        ''.join(annotated) if annotated else '<li>No manually linked source claims.</li>')+'</ul>'
     return f'''<!doctype html><html><head><meta charset="utf-8"><title>Investigation Report</title>
     <style>body{{font:13px Arial,sans-serif;color:#14233f;margin:35px}}h1{{font-size:24px}}h2{{font-size:16px;margin-top:30px}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}td,th{{border:1px solid #cbd5e1;padding:8px;overflow-wrap:anywhere;vertical-align:top}}th{{background:#e6edf7}}.warn{{padding:15px;background:#fff2d9}}.muted{{color:#64748b}}a{{color:#1254ad}}@page{{size:A4 landscape;margin:14mm}}</style></head><body>
     <h1>OSINTALPHA / Investigation report</h1><p class="muted">Case ID: {esc(case['id'])} • Generated {esc(iso_now())}</p>
@@ -521,6 +537,7 @@ def build_html_report(case,evidence,runs):
     <table><thead><tr><th>Source</th><th>Candidate / record</th><th>Finding and limits</th><th>Review</th><th>Citation</th><th>Fetched UTC</th></tr></thead><tbody>{rows or '<tr><td colspan="6">No evidence collected.</td></tr>'}</tbody></table>
     <h2>Source failures / limitations</h2><ul>{failures or '<li>No recorded source errors; completeness is not guaranteed.</li>'}</ul>
     {research_appendix}
+    {claim_section}
     <p class="muted">Method: public API candidate discovery, manual evidence review, no automatic identity merging. Source links may change after collection. For sensitive real-world decisions obtain independent verification.</p></body></html>'''
 
 
@@ -560,7 +577,11 @@ def report_json(case_id:str,actor=Depends(actor_from_cookie)):
     from .report_continuity import latest_snapshot
     with db.connect() as conn:
         research=latest_snapshot(conn,case_id)
+    from .claim_support import index as report_claim_index
+    with db.connect() as claim_conn:
+        claim_support=report_claim_index(claim_conn,case_id)
     return {'case':ca,'evidence':ev,'runs':runs,'research':research,
+            'claimSupport':claim_support,
             'generatedAt':iso_now(),
             'disclaimer':'Candidate public records require independent identity and fact verification.'}
 
@@ -1233,6 +1254,10 @@ app.include_router(source_archives_router)
 # Bounded HEAD-only source availability observations, not automatic archiving.
 from .source_link_health import router as source_link_health_router
 app.include_router(source_link_health_router)
+
+# Exact quote-state index for reports, with no automatic factual adjudication.
+from .claim_support import router as claim_support_router
+app.include_router(claim_support_router)
 
 # Human-recorded publisher ownership, institution references and claim disputes.
 from .source_trust import router as source_trust_router
