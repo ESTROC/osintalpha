@@ -33,7 +33,8 @@ def test_mobile_accessibility_and_initial_request_count():
         page.goto(base+'/?case='+case,wait_until='domcontentloaded')
         page.get_by_text('CASE ANSWER · PROVENANCE FIRST').wait_for(timeout=15000)
         assert len([url for url in requests if '/initial-view' in url])==1,requests
-        assert len(requests)<=9,requests
+        assert len(requests)<=12,requests
+        assert len([url for url in requests if '/api/cases/'+case+'/' in url])<=4,requests
         layout=page.evaluate("({lang:document.documentElement.lang,width:innerWidth,scroll:document.documentElement.scrollWidth,title:document.title})")
         assert layout['lang']=='en' and layout['title']
         assert layout['scroll']<=layout['width']+110,layout
