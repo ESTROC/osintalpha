@@ -432,6 +432,14 @@ CREATE TABLE IF NOT EXISTS time_qualified_affiliations (
  created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS affiliations_case ON time_qualified_affiliations(case_id,candidate_id,created_at);
+CREATE TABLE IF NOT EXISTS candidate_refinements (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ candidate_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+ original_question TEXT NOT NULL,clue_kind TEXT NOT NULL,
+ clue_value TEXT NOT NULL,search_query TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS candidate_refinements_case ON candidate_refinements(case_id,candidate_id,reviewed_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
