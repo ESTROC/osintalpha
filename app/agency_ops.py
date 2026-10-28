@@ -319,6 +319,50 @@ def save_recipe(body:RecipeInput,actor=Depends(core.protect)):
     core.write_audit(actor['id'],'recipe_create','user',actor['id'],ident)
     return {'id':ident,'version':1}
 
+class RecipeEdit(BaseModel):
+    expected_version:int=Field(ge=1)
+    title:str=Field(min_length=4,max_length=90)
+    description:str=Field(default='',max_length=240)
+    question:str=Field(min_length=12,max_length=200)
+
+@router.put('/api/research/recipes/{recipe_id}')
+def revise_recipe(recipe_id:str,body:RecipeEdit,actor=Depends(core.protect)):
+    from .research_safety import require_safe_remote_query
+    # Person-targeted recipes must never include private tracking/contact searches.
+    require_safe_remote_query(body.question,'person')
+    with db.connect() as conn:
+        current=conn.execute('SELECT version FROM agency_recipes WHERE id=? AND owner_id=?',
+                              (recipe_id,actor['id'])).fetchone()
+        if not current:raise HTTPException(404,'Owned saved procedure not found.')
+        if current['version']!=body.expected_version:
+            raise HTTPException(409,'Procedure changed. Reload current version before editing.')
+        new_version=current['version']+1
+        conn.execute('UPDATE agency_recipes SET title=?,description=?,question=?,'
+           'version=?,updated_at=? WHERE id=?',
+          (body.title.strip(),body.description.strip(),body.question.strip(),
+           new_version,core.iso_now(),recipe_id))
+    core.write_audit(actor['id'],'recipe_revision','user',actor['id'],recipe_id)
+    return {'id':recipe_id,'version':new_version,'executedAutomatically':False}
+
+@router.get('/api/research/recipes/{recipe_id}/preview')
+def preview_recipe(recipe_id:str,subject_type:Literal['person','organization','domain','ip']='organization',
+    country:Literal['US','IN','GB','CA','AU','DE','FR']='US',
+    freshness:Literal['all','pd','pw','pm','py']='all',
+    actor=Depends(core.actor_from_cookie)):
+    from .research_safety import require_safe_remote_query
+    from .provider_ops import LIMITS
+    with db.connect() as conn:
+        own=conn.execute('SELECT * FROM agency_recipes WHERE id=? AND owner_id=?',
+               (recipe_id,actor['id'])).fetchone()
+        if not own:raise HTTPException(404,'Only the recipe owner can preview this saved query.')
+    require_safe_remote_query(own['question'],subject_type)
+    return {'id':recipe_id,'version':own['version'],'publicQuestion':own['question'],
+       'country':country,'freshness':freshness,'subjectType':subject_type,
+       'configuredDailyCaseCaps':LIMITS,
+       'quotaRemaining':None,'vendorCost':None,
+       'executedAutomatically':False,'automaticRecurringSearch':False,
+       'note':'Preview only. Reusing this text does not create a case or call an external provider.'}
+
 @router.get('/api/research/ops-status')
 def operations(actor=Depends(core.actor_from_cookie)):
     import os
