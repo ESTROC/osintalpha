@@ -85,7 +85,7 @@ def record_reference(case_id:str,body:SatelliteReference,actor=Depends(core.prot
         if not src or src['status']!='corroborated':
             raise HTTPException(422,'A reviewed public publisher source is required.')
         ident=core.uid()
-        conn.execute('INSERT INTO licensed_satellite_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        conn.execute('INSERT INTO licensed_satellite_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
          (ident,case_id,body.evidence_id,body.provider,body.official_catalog_url,
           body.permission_url,body.acquisition_date.isoformat(),body.ground_resolution_m,
           body.crs,json.dumps(body.bounding_box),body.review_note.strip(),actor['id'],core.iso_now()))
