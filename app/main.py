@@ -1283,6 +1283,10 @@ app.include_router(source_quality_router)
 from .affiliation_history import router as affiliation_history_router
 app.include_router(affiliation_history_router)
 
+# Restore exact saved question and stage outcomes; create idempotent bounded continuation.
+from .resumable_search import router as resumable_search_router
+app.include_router(resumable_search_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
