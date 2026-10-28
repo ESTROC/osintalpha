@@ -216,9 +216,12 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                     for x in payload.get('web',{}).get('results',[])[:12]:
                         url=str(x.get('url',''))
                         if not public_https(url):continue
-                        items.append({'title':str(x.get('title') or url)[:200],
-                                      'description':str(x.get('description') or '')[:900],
-                                      'url':url,
+                        from .source_content_safety import assess_untrusted
+                        title=str(x.get('title') or url)[:200]
+                        desc=str(x.get('description') or '')[:900]
+                        screening=assess_untrusted(title+' '+desc)
+                        items.append({'title':title,'description':desc,
+                                      'url':url,'screening':screening,
                                       'dateProvenance':date_provenance(x,retrieved)})
                     decision=coverage_decision(items,queries_executed=page+1,
                                                max_queries=body.pages)
@@ -253,6 +256,7 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                      'requestedFreshness':page_window['freshness'],
                      'pageDateFilter':page_window,
                      'dateProvenance':item['dateProvenance'],
+                     'contentScreening':item['screening'],
                      'identity_verified':False,'page_fetched':False}
                 disposition=save_observation(conn,case_id=case_id,run_id=runid,
                     query=query,provider='brave_web',

@@ -196,8 +196,12 @@ def evidence_pack(case_id:str,reviewed_only:bool=True,actor=Depends(core.actor_f
         stamp=c.execute('SELECT decision,note,signed_at,review_digest FROM case_signoffs WHERE case_id=? ORDER BY signed_at DESC,id DESC LIMIT 1',(case_id,)).fetchone()
         current=review_digest(c,case_id)
     signer=dict(stamp) if stamp else None
+    from .claim_support import index as source_quote_index
+    with db.connect() as quote_conn:
+        bound=source_quote_index(quote_conn,case_id)
     return {'caseId':case_id,'subject':case['query'],'generatedAt':core.iso_now(),
             'reviewedOnly':reviewed_only,'claims':claims,'evidence':evidence,
+            'claimSupport':bound,
             'signoff':signer,'signoffCurrent':bool(signer and signer['review_digest']==current),
             'integrityNotice':'Source metadata hashes are NOT a forensic capture or certified chain of custody.',
             'distributionNotice':'Review source authenticity, identity, rights and sensitive assertions before sharing.'}
@@ -219,6 +223,11 @@ def signoff(case_id:str,body:SignoffInput,actor=Depends(core.protect)):
             baseline=c.execute('SELECT evidence_digest FROM assessment_review_baselines WHERE case_id=?',(case_id,)).fetchone()
             if not baseline or baseline['evidence_digest']!=evidence_digest(c,case_id):
                 raise HTTPException(409,'Assessment must be re-reviewed and saved after source changes before a current signoff.')
+        if body.decision=='reviewed_with_limitations':
+            from .claim_support import index as claim_support_index
+            support=claim_support_index(c,case_id)
+            if support['claimsMissingCurrentExactQuotes']:
+                raise HTTPException(422,'Report approval requires a current exact captured quotation for every manually stated claim. Re-capture and re-link the claims; text matches still need independent factual review.')
         digest=review_digest(c,case_id)
         ident=core.uid()
         c.execute('INSERT INTO case_signoffs VALUES (?,?,?,?,?,?,?)',

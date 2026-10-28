@@ -372,6 +372,47 @@ CREATE TABLE IF NOT EXISTS case_research_approvals (
 );
 CREATE INDEX IF NOT EXISTS case_research_approvals_case
  ON case_research_approvals(case_id,approved_at);
+CREATE TABLE IF NOT EXISTS evidence_source_reviews (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ source_kind TEXT NOT NULL,assertion_owner TEXT NOT NULL,
+ publisher_authentication TEXT NOT NULL,
+ relation_to_subject TEXT NOT NULL,
+ rationale TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS evidence_source_reviews_case ON evidence_source_reviews(case_id,evidence_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS claim_conflict_reviews (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ left_claim_id TEXT NOT NULL REFERENCES claim_links(id) ON DELETE CASCADE,
+ right_claim_id TEXT NOT NULL REFERENCES claim_links(id) ON DELETE CASCADE,
+ classification TEXT NOT NULL,
+ right_of_reply TEXT NOT NULL,
+ review_note TEXT NOT NULL,
+ reviewer_id TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS claim_conflict_reviews_case ON claim_conflict_reviews(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS source_document_archives (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT REFERENCES source_captures(id) ON DELETE SET NULL,
+ original_url TEXT NOT NULL,asset_kind TEXT NOT NULL,
+ original_sha256 TEXT NOT NULL,byte_count INTEGER NOT NULL,
+ content_b64 TEXT NOT NULL,extracted_text_sha256 TEXT NOT NULL DEFAULT '',
+ stored_at TEXT NOT NULL,expires_at TEXT NOT NULL,
+ uploaded_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS source_document_archives_case
+ ON source_document_archives(case_id,evidence_id,stored_at);
+CREATE TABLE IF NOT EXISTS source_link_checks (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ original_url TEXT NOT NULL,request_method TEXT NOT NULL,
+ http_status INTEGER,check_state TEXT NOT NULL,
+ response_class TEXT NOT NULL,
+ checked_at TEXT NOT NULL,checked_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS source_link_checks_case ON source_link_checks(case_id,evidence_id,checked_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
