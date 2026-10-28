@@ -1,7 +1,7 @@
 
 /* OSINT Alpha release 8.1.0 pilot public research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},providerIssues:null,originReview:null,reviewObligations:null,timeliness:null,case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,chronology:null,cursorSources:[],cursorNext:null,runEvolution:null,budget:null,reviewedDraft:null,distribution:null,redaction:null,methodology:null,nextStep:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},providerIssues:null,originReview:null,reviewObligations:null,timeliness:null,case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,chronology:null,cursorSources:[],cursorNext:null,runEvolution:null,budget:null,reviewedDraft:null,distribution:null,redaction:null,methodology:null,nextStep:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,comparison:null,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'Full name or public handle',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'Organization or registered business',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'Public domain name',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'Public IP address',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -46,8 +46,17 @@ function cases(){
  const controls='<div class="panel panel-pad" style="display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="meta">'+total+' matching cases · page '+page+' of '+pages+'</span>'+
  '<div class="inline-actions"><button class="btn small" type="button" data-case-page="'+(page-1)+'" '+(page<=1?'disabled':'')+'>Previous</button>'+
  '<button class="btn small" type="button" data-case-page="'+(page+1)+'" '+(page>=pages?'disabled':'')+'>Next</button></div></div>';
- return heading('RESEARCH PORTFOLIO','Investigations','Search and filter your complete accessible case registry, then resume a saved investigation.','<button data-nav="home" class="btn primary">'+icon('plus')+' New investigation</button>')+
- filters+'<div class="panel">'+(s.cases.length?s.cases.map(caseRow).join(''):'<div class="empty">No investigations match these filters.</div>')+'</div>'+controls;
+ const compareOptions=s.cases.map(x=>'<option value="'+h(x.id)+'">'+h(x.title)+'</option>').join('');
+ const comparison='<details class="panel panel-pad" style="margin:15px 0"><summary>Compare two authorized case reviews</summary>'+
+ '<p class="help">Only explicitly selected cases and source-quoted reviewed claims are compared; no identity merge.</p>'+
+ '<form id="case-compare-form" class="input-stack"><label>First case<select name="left" required>'+compareOptions+'</select></label>'+
+ '<label>Second case<select name="right" required>'+compareOptions+'</select></label>'+
+ '<button class="btn small" type="submit">Compare reviewed claims</button></form>'+
+ (s.comparison?'<p class="meta">Overlapping exact text+source: '+Number(s.comparison.overlappingExactTextAndSource)+
+ ' · left only: '+Number(s.comparison.leftOnly)+' · right only: '+Number(s.comparison.rightOnly)+'</p>'+
+ '<p class="help">'+h(s.comparison.notice)+'</p>':'')+'</details>';
+  return heading('RESEARCH PORTFOLIO','Investigations','Search and filter your complete accessible case registry, then resume a saved investigation.','<button data-nav="home" class="btn primary">'+icon('plus')+' New investigation</button>')+
+ filters+comparison+'<div class="panel">'+(s.cases.length?s.cases.map(caseRow).join(''):'<div class="empty">No investigations match these filters.</div>')+'</div>'+controls;
 }
 const tabs=['overview','assistant','evidence','reports'];
 const advancedTabs=['portfolio','investigate','tasks','team','candidates','findings','activity'];
@@ -95,6 +104,14 @@ function caseTasks(){
  const items=s.tasks||[],options=[['todo','To do'],['in_progress','In progress'],['blocked','Blocked'],['awaiting_review','Awaiting review'],['done','Done'],['cancelled','Cancelled']];
  const opt=(current)=>options.map(([v,label])=>'<option value="'+v+'" '+(v===current?'selected':'')+'>'+label+'</option>').join('');
  const team=(s.taskAssignees||[]).map(a=>'<option value="'+h(a.id)+'">'+h(a.username)+'</option>').join('');
+ const batchPanel=items.length?'<section class="panel panel-pad" style="margin:16px 0"><h3>Audited batch task updates</h3>'+
+ '<form id="task-batch-form" class="input-stack"><label>Select 1–20 tasks<select name="ids" multiple size="5">'+
+ items.slice(0,20).map(x=>'<option value="'+h(x.id)+'">'+h(x.title)+' · '+h(x.status)+'</option>').join('')+'</select></label>'+
+ '<label>Update status<select name="status"><option value="blocked">Blocked</option><option value="in_progress">In progress</option>'+
+ '<option value="awaiting_review">Awaiting review</option><option value="todo">To do</option></select></label>'+
+ '<textarea name="note" minlength="20" maxlength="800" required placeholder="Provide one applicable rationale for the selected tasks."></textarea>'+
+ '<button class="btn small" type="submit">Preview, then confirm exact batch</button>'+
+ '<p class="help">Bulk completion and identity verification are not supported. Verify the preview before submitting again.</p></form></section>':'';
  const form='<section class="panel"><div class="panel-head"><div class="panel-title">New research task</div></div><form id="task-form" class="panel-pad input-stack"><label>Task objective<input name="title" minlength="3" maxlength="180" required placeholder="Verify employer from official website"></label><label>Instructions and evidence needed<textarea name="description" maxlength="2500" placeholder="What needs checking, expected source, accepted completion criteria"></textarea></label><div class="form-row"><label>Priority<select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option><option value="low">Low</option></select></label><label>Owner<select name="assigned_to"><option value="">Unassigned</option>'+team+'</select></label><label>Due date<input name="due_date" type="date"></label></div><button class="btn primary" type="submit">Create research task</button><p class="help">Assignment does not grant access to a different case. Only authorized case owner/administrator assignments are offered.</p></form></section>';
  const cards=items.length?items.map(x=>'<article class="candidate-card"><div class="badge-row"><span class="tag '+(x.status==='done'?'ok':x.status==='blocked'?'warn':'')+'">'+h(x.status.replaceAll('_',' '))+'</span><span class="tag">'+h(x.priority)+'</span></div><h3>'+h(x.title)+'</h3><p class="page-sub">'+h(x.description||'No instructions provided.')+'</p><div class="meta">Assigned to '+h(x.assignee_name||'unassigned')+' · Due '+h(x.due_date||'not scheduled')+'</div><form data-task-change="'+h(x.id)+'" class="input-stack" style="margin-top:15px"><label>Update status<select name="status">'+opt(x.status)+'</select></label><label>Reason or reviewed result<textarea name="note" minlength="8" maxlength="1200" required placeholder="Summarize work completed, blockers, supporting source or uncertainty"></textarea></label><button type="submit" class="btn small">Save task update</button><button type="button" data-task-history="'+h(x.id)+'" class="btn small subtle">View decision history</button></form>'+
  ((s.taskHistory[x.id]||[]).length?'<div class="sourcehealth" style="display:block;margin-top:12px">'+s.taskHistory[x.id].map(a=>'<p class="meta">'+h(when(a.created_at))+' · '+h(a.actor)+' · '+h(a.old_status)+' → '+h(a.new_status)+' · '+h(a.details)+'</p>').join('')+'</div>':'')+'</article>').join(''):'<div class="empty">No assigned research tasks yet. Record work that needs checking, ownership and completion evidence.</div>';
@@ -230,7 +247,7 @@ function caseInvestigate(){
  ((job.steps||[]).length?job.steps.map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.number+'. '+x.provider+' · '+x.query)+'</strong><div class="item-sub">'+h(x.rationale)+'</div><div class="meta">'+h(x.error||'')+'</div></div><div class="badge-row">'+tag(x.status)+'<span class="tag">'+Number(x.returned)+' returned</span><span class="tag">'+Number(x.new)+' new</span></div></div>').join(''):
  '<div class="empty">No search steps executed. Start or continue the saved research run.</div>')+
  '</section>':'';
- return workflow+'<div class="grid2">'+form+list+'</div>'+steps;
+ return workflow+batchPanel+'<div class="grid2">'+form+list+'</div>'+steps;
 }
 
 function caseCandidates(){
@@ -987,10 +1004,31 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form','case-candidate-refine-form','credential-change-form','case-title-form','distribution-approval-form','report-redaction-form','report-redacted-download-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink||!!f.dataset?.adminReset||!!f.dataset?.adminStatus))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form','case-candidate-refine-form','credential-change-form','case-title-form','distribution-approval-form','report-redaction-form','report-redacted-download-form','case-compare-form','task-batch-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink||!!f.dataset?.adminReset||!!f.dataset?.adminStatus))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
- if(f.id==='distribution-approval-form'){
+ if(f.id==='case-compare-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ if(d.left===d.right)throw Error('Choose two distinct cases to compare.');
+ s.comparison=await api('/api/agency/reviewed-case-compare?left='+encodeURIComponent(d.left)+'&right='+encodeURIComponent(d.right));
+ render();toast('Reviewed-source comparison loaded without merging identities.');
+}
+if(f.id==='task-batch-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ const ids=[...f.querySelector('select[name="ids"]').selectedOptions].map(x=>x.value);
+ if(!ids.length)throw Error('Select at least one case task.');
+ const signature=JSON.stringify({ids,status:d.status,note:d.note});
+ if(f.dataset.confirmed!==signature){
+  const preview=await api('/api/cases/'+s.id+'/tasks/batch-preview',{method:'POST',body:{ids,status:d.status}});
+  if(!preview.canApply)throw Error('Some selected tasks are inaccessible: '+preview.rejectedCount);
+  f.dataset.confirmed=signature;toast('Preview passed for '+ids.length+' tasks. Submit again to apply.');
+ }else{
+  await api('/api/cases/'+s.id+'/tasks/batch',{method:'POST',body:{ids,status:d.status,note:d.note}});
+  const list=await api('/api/cases/'+s.id+'/tasks');s.tasks=list.items||[];s.taskTotal=list.total||0;render();
+  toast('Audited task states updated. No tasks automatically completed.');
+ }
+}
+if(f.id==='distribution-approval-form'){
   const d=Object.fromEntries(new FormData(f).entries());
   const approval={report_digest:s.distribution.currentDigest,reviewer_note:d.reviewer_note};
   for(const k of ['material_claims_checked','source_rights_checked','sensitive_content_checked','methodology_checked','limitations_checked'])approval[k]=!!d[k];
