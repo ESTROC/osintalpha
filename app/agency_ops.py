@@ -491,10 +491,29 @@ async def provider_canary(body:CanaryInput,actor=Depends(core.protect)):
         count=len(results)
     except Exception as exc:
         status='error';note='Provider request unsuccessful: '+type(exc).__name__;count=0
+    from .provider_reliability import classify_error
+    # A provider can be empty without being offline. No raw exception, API key or source query is stored.
+    classification=('compatible_response' if status=='ok' else 'empty_response' if status=='empty' else 'provider_failure')
+    with db.connect() as record_db:
+        record_db.execute('INSERT INTO provider_contract_canaries VALUES (?,?,?,?,?,?,?)',
+            (core.uid(),body.provider,status,classification,count,core.iso_now(),actor['id']))
     core.write_audit(actor['id'],'provider_canary','source',body.provider,status)
-    return {'provider':body.provider,'status':status,'candidateCount':count,
+    return {'provider':body.provider,'status':status,'classification':classification,
+            'recordedForMonitoring':True,'candidateCount':count,
             'checkedAt':core.iso_now(),'sampleQuery':query,'message':note,
             'notice':'Manual live connectivity check only; this does not verify relevance, coverage, uptime or an identity match.'}
+
+@router.get('/api/research/provider-canary-history')
+def canary_history(actor=Depends(core.actor_from_cookie)):
+    core.admin_only(actor)
+    with db.connect() as conn:
+        rows=[dict(x) for x in conn.execute(
+           'SELECT provider,outcome,classification,candidate_count,checked_at '
+           'FROM provider_contract_canaries ORDER BY checked_at DESC,id DESC LIMIT 100')]
+    return {'items':rows,'continuousUptimeMeasured':False,
+            'scheduledLiveChecks':False,
+            'warning':'Only explicitly consented fixed-query provider canaries are recorded. Neither results nor synthetic tests establish uptime or identity accuracy.'}
+
 
 @router.get('/api/research/model-configuration')
 def model_configuration(actor=Depends(core.actor_from_cookie)):
