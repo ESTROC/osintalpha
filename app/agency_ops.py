@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .release import VERSION
 from . import db
 from . import main as core
 from .connectors import CATALOG
@@ -329,7 +330,7 @@ def operations(actor=Depends(core.actor_from_cookie)):
                    (SELECT 1 FROM case_members m WHERE m.case_id=c.id AND m.user_id=?))
                GROUP BY r.provider,r.state ORDER BY r.provider,r.state LIMIT 80""",
             (actor['role'],actor['id'],actor['id']))]
-    return {'apiStatus':'ok','utc':core.iso_now(),'version':__import__('app.release',fromlist=['VERSION']).VERSION,
+    return {'apiStatus':'ok','utc':core.iso_now(),'version':VERSION,
             'configured':{'Brave':bool(os.getenv('BRAVE_SEARCH_API_KEY')),
                           'Groq':bool(os.getenv('GROQ_API_KEY')),
                           'TfL':bool(os.getenv('TFL_APP_KEY'))},

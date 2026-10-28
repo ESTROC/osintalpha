@@ -163,7 +163,7 @@ def logout(req: Request, response: Response, actor=Depends(protect)):
 
 @app.get('/api/auth/me')
 def me(actor=Depends(actor_from_cookie)):
-    return {'user':actor,'mustChangePassword':bool(actor.get('must_change_password')),
+    return {'user':actor,'releaseVersion':RELEASE_VERSION,'mustChangePassword':bool(actor.get('must_change_password')),
             'aiConfigured':bool(os.getenv('XAI_API_KEY')),
             'tflConfigured':bool(os.getenv('TFL_APP_KEY')),
             'groqConfigured':bool(os.getenv('GROQ_API_KEY'))}
