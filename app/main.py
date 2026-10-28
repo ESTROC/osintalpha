@@ -697,6 +697,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
              'evidence':records if partitions is None else [],
              'candidateEvidencePartitions':partitions,
              'sourceRuns':[{'provider':r['provider'],'state':r['state'],'message':r['message']} for r in runs[:18]]}
+    from .source_content_safety import sanitize_context
+    context,source_redactions=sanitize_context(context)
     model_for_web=os.getenv('GROQ_MODEL','openai/gpt-oss-120b') if provider=='groq' else ''
     if body.web_search and model_for_web not in ('openai/gpt-oss-120b','openai/gpt-oss-20b'):
         raise HTTPException(409,'Groq browser search currently requires a GPT-OSS model.')
@@ -741,6 +743,9 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        response['sourceContentScreening']={
+            'quarantinedItems':len(source_redactions),
+            'notice':'Untrusted content redacted before model context; this is heuristic screening, not a safety guarantee.'}
         # Separate observed candidates from confirmed person identity. Even a
         # source with matching name, URL and exact passage is not proof that
         # the searched person owns that profile.
