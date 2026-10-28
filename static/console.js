@@ -507,29 +507,23 @@ async function refreshCases(){
 async function openCase(id){if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/?case='+encodeURIComponent(id));s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.chronology=null;s.cursorSources=[];s.cursorNext=null;s.runEvolution=null;s.budget=null;s.reviewedDraft=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
  try{const saved=await api('/api/cases/'+id+'/search-plan');if(saved.available){s.smartPlan=saved.plan;s.smartQuestion=saved.question}}catch(e){/* Legacy case; no versioned plan */}s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
- // The initial case view needs only overview, conversation and provider state.
- // Specialist modules are fetched when explicitly selected.
- const [tr,conv,researchPlan,runs,intel,webProviders,candidates]=await Promise.all([
-   api('/api/cases/'+s.id+'/triage'),
-   api('/api/cases/'+s.id+'/conversations'),
-   api('/api/cases/'+s.id+'/research-plan?depth='+s.depth),
-   api('/api/cases/'+s.id+'/research-history'),
-   api('/api/cases/'+s.id+'/intelligence'),
-   api('/api/research/providers'),
-   api('/api/cases/'+s.id+'/candidates')
- ]);
- s.queryExplain=await api('/api/cases/'+s.id+'/query-explain');
- s.readiness=await api('/api/cases/'+s.id+'/decision-readiness');
- s.searchProgress=await api('/api/cases/'+s.id+'/search-progress');
- s.dossier=await api('/api/cases/'+s.id+'/dossier');
- const [budget,draft,refinements]=await Promise.all([
-    api('/api/cases/'+s.id+'/research-budget'),
-    api('/api/cases/'+s.id+'/reviewed-report-draft'),
-    api('/api/cases/'+s.id+'/candidate-refinements')
- ]);
- s.budget=budget;s.reviewedDraft=draft;s.refinements=refinements;
- s.triage=tr;s.conversations=conv.items||[];s.researchPlan=researchPlan;
- s.researchRuns=runs.items||[];s.intel=intel;s.webProviders=webProviders;s.candidates=candidates.items||[];
+ // Initial response is one authorized request. Specialist tabs refresh their
+ // own data when visited; no hidden background provider calls are started.
+ const all=await api('/api/cases/'+s.id+'/initial-view?depth='+encodeURIComponent(s.depth));
+ s.triage=all.triage;
+ s.conversations=all.conversations?.items||[];
+ s.researchPlan=all.researchPlan;
+ s.researchRuns=all.runs?.items||[];
+ s.intel=all.intelligence;
+ s.webProviders=all.webProviders;
+ s.candidates=all.candidates?.items||[];
+ s.queryExplain=all.queryExplain;
+ s.readiness=all.readiness;
+ s.searchProgress=all.searchProgress;
+ s.dossier=all.dossier;
+ s.budget=all.budget;
+ s.reviewedDraft=all.draft;
+ s.refinements=all.refinements;
  if(s.conversations.length)await loadConversation(s.conversations[0].id);
 }
 async function loadAdvancedCaseState(tab){

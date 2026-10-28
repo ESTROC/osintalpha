@@ -1442,6 +1442,10 @@ app.include_router(analyst_governance_router)
 from .review_metrics import router as review_metrics_router
 app.include_router(review_metrics_router)
 
+# Reduce duplicate case-load HTTP round trips using one authenticated initial response.
+from .case_initial import router as case_initial_router
+app.include_router(case_initial_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
