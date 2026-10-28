@@ -1299,6 +1299,10 @@ app.include_router(affiliation_history_router)
 from .resumable_search import router as resumable_search_router
 app.include_router(resumable_search_router)
 
+# Answer-first case dossier and first-class claim quotation drilldown.
+from .case_dossier import router as case_dossier_router
+app.include_router(case_dossier_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
