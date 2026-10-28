@@ -56,7 +56,7 @@ def save_public_affiliation(case_id:str,body:PublicAffiliation,actor=Depends(cor
                 excerpt['extracted_text'],excerpt['quote_text']):
             raise HTTPException(409,'Captured source text has changed or quote integrity failed.')
         id=core.uid()
-        c.execute('INSERT INTO time_qualified_affiliations VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        c.execute('INSERT INTO time_qualified_affiliations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
            (id,case_id,body.candidate_id,body.evidence_id,body.excerpt_id,
             body.organization_name.strip(),body.role_title.strip(),
             body.start_date,body.end_date,body.date_precision,
