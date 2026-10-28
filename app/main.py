@@ -1454,6 +1454,10 @@ app.include_router(report_distribution_router)
 from .outcome_guidance import router as outcome_guidance_router
 app.include_router(outcome_guidance_router)
 
+# Reviewed case-to-case comparison and audit-friendly non-certifying bulk task actions.
+from .cross_case_review import router as cross_case_review_router
+app.include_router(cross_case_review_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
