@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS auth_failed_attempts (
 );
 CREATE INDEX IF NOT EXISTS auth_failed_attempts_account ON auth_failed_attempts(account_digest,observed_at);
 CREATE INDEX IF NOT EXISTS auth_failed_attempts_peer ON auth_failed_attempts(peer_digest,observed_at);
+CREATE TABLE IF NOT EXISTS user_security_state (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ must_change_password INTEGER NOT NULL DEFAULT 0,
+ password_changed_at TEXT,
+ changed_by TEXT
+);
 CREATE TABLE IF NOT EXISTS sessions (
  token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at BIGINT NOT NULL
 );
@@ -456,6 +462,40 @@ CREATE TABLE IF NOT EXISTS provider_health_events (
  status_code INTEGER,latency_ms INTEGER NOT NULL,observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS provider_health_index ON provider_health_events(provider,observed_at);
+CREATE TABLE IF NOT EXISTS provider_terms_reviews (
+ provider TEXT PRIMARY KEY,rights_status TEXT NOT NULL,
+ permitted_uses TEXT NOT NULL,terms_url TEXT NOT NULL,
+ review_notes TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),
+ reviewed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS alias_validity_reviews (
+ alias_id TEXT PRIMARY KEY REFERENCES research_aliases(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ valid_from TEXT,valid_until TEXT,
+ review_state TEXT NOT NULL,review_rationale TEXT NOT NULL,
+ reviewed_at TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS translation_capture_reviews (
+ id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT NOT NULL REFERENCES source_captures(id) ON DELETE CASCADE,
+ source_sha256 TEXT NOT NULL,
+ source_start INTEGER NOT NULL,source_end INTEGER NOT NULL,
+ original_text TEXT NOT NULL,translated_text TEXT NOT NULL,
+ language_from TEXT NOT NULL,language_to TEXT NOT NULL,
+ method TEXT NOT NULL,method_version TEXT NOT NULL,
+ caveat TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS translation_capture_reviews_case ON translation_capture_reviews(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS case_preservation_policy (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ review_after TEXT NOT NULL,
+ legal_hold INTEGER NOT NULL DEFAULT 0,
+ rationale TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),
+ reviewed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
