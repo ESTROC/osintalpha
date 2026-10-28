@@ -7,6 +7,7 @@ const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
 const when=x=>{if(!x)return 'Unknown';const n=Number(x);const d=new Date(typeof x==='number'||(/^\d{10,13}$/.test(String(x)))?(n<1e11?n*1000:n):x);return Number.isFinite(+d)?d.toLocaleString():String(x)};
 const link=(href,label)=>'<a class="text-link" target="_blank" rel="noopener noreferrer" href="'+h(url(href))+'">'+h(label)+' ↗</a>';
+const sourceBadge=x=>'<span class="source-provider-mark" role="img" aria-label="Source provider: '+h(x||'unknown')+'">'+h(String(x||'?').slice(0,2).toUpperCase())+'</span>';
 const tag=x=>'<span class="tag '+({corroborated:'ok',configured:'ok',ok:'ok',candidate:'warn',error:'bad',disputed:'warn',rejected:'bad',not_configured:'warn'}[x]||'')+'">'+h(x)+'</span>';
 const icon=k=>{const paths={home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',search:'<circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/>',case:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h6"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-5 16-5 16 0"/>',building:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h2m4 0h2M8 11h2m4 0h2"/>',globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>',shield:'<path d="m12 2 8 4v6c0 6-4 9-8 10-4-1-8-4-8-10V6Z"/><path d="m9 12 2 2 4-4"/>',world:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18m0-18c5 5 5 13 0 18"/>',sources:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M4 12H2m20 0h-2M12 4V2m0 20v-2M6 6 4 4m14 14 2 2"/>',arrow:'<path d="M4 12h16m-7-7 7 7-7 7"/>',back:'<path d="M20 12H4m7 7-7-7 7-7"/>',refresh:'<path d="M20 8a8 8 0 0 0-14-2L4 9m0-6v6h6M4 16a8 8 0 0 0 14 2l2-3m0 6v-6h-6"/>',plus:'<path d="M12 4v16M4 12h16"/>'};return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[k]||paths.case)+'</svg>'};
 function toast(text,error=false){const n=document.createElement('div');n.className='toast'+(error?' bad':'');n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),5100)}
@@ -144,7 +145,7 @@ function caseDossier(){
    '<label>Class '+select('dossier-class',[['all','Any'],['account_or_profile_url','Public account leads'],['public_document_or_mention','Documents and mentions']],s.dossierClass)+'</label></div>';
  const items=sources.map(x=>'<div class="item-row dossier-source"><div class="row-main">'+
   (x.licensedThumbnail?'<img class="dossier-thumb" src="'+h(url(x.licensedThumbnail.url))+'" loading="lazy" referrerpolicy="no-referrer" alt="Licensed publisher source media; not a verified person photograph">':'')+
-  '<strong>'+h(x.label)+'</strong><p class="item-sub">'+h(x.provider)+' · '+h(x.reviewStatus)+' · '+h(x.sourceClass.replaceAll('_',' '))+' · '+h(when(x.fetchedAt))+'</p><p class="help">'+h(x.summary)+'</p>'+
+  sourceBadge(x.provider)+'<strong>'+h(x.label)+'</strong><p class="item-sub">'+h(x.provider)+' · '+h(x.reviewStatus)+' · '+h(x.sourceClass.replaceAll('_',' '))+' · '+h(when(x.fetchedAt))+'</p><p class="help">'+h(x.summary)+'</p>'+
   '<p class="meta">Ranking terms: '+h((x.rankingExplanation?.matchedQuestionTerms||[]).join(', ')||'none')+' · No calibrated person match</p>'+
   (x.licensedThumbnail?'<p class="meta">Source media credit: '+h(x.licensedThumbnail.credit)+' · '+h(x.licensedThumbnail.license)+'</p>':'')+
   '</div><button class="btn small" data-go-evidence="'+h(x.id)+'">Inspect</button></div>').join('');
@@ -173,7 +174,8 @@ function caseDossier(){
  (draft.sourceCount?'<button class="btn small primary" data-approve-report-draft="'+h(draft.reviewToken)+'">I reviewed these excerpts · save pending report</button>':
  '<p class="help">Corroborate and attach exact quotations before a report draft can be saved.</p>')+
  '</div></section>';
- return main+budgetPanel+'<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+missing+refinePanel+draftPanel+sourcePanel;
+ return main+missing+sourcePanel+'<details class="panel dossier-secondary"><summary>More analysis · identity candidates, claim review and usage</summary>'+
+ '<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+refinePanel+draftPanel+budgetPanel+'</details>';
 }
 
 function caseOverview(){
