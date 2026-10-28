@@ -446,6 +446,11 @@ CREATE TABLE IF NOT EXISTS external_api_call_ledger (
  by_user TEXT NOT NULL REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS external_api_usage_case ON external_api_call_ledger(case_id,provider,reserved_at);
+CREATE TABLE IF NOT EXISTS external_api_daily_counters (
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,day TEXT NOT NULL,used INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(case_id,provider,day)
+);
 CREATE TABLE IF NOT EXISTS provider_health_events (
  id TEXT PRIMARY KEY,provider TEXT NOT NULL,outcome TEXT NOT NULL,
  status_code INTEGER,latency_ms INTEGER NOT NULL,observed_at TEXT NOT NULL

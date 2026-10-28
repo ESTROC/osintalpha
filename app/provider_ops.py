@@ -19,13 +19,19 @@ def reserve(case_id,user_id,provider):
     if provider not in LIMITS:raise ValueError('Unknown external budget class')
     day=datetime.now(timezone.utc).date().isoformat()
     with db.connect() as conn:
-        count=conn.execute('SELECT count(*) n FROM external_api_call_ledger '
-          'WHERE case_id=? AND provider=? AND reserved_at>=?',(case_id,provider,day)).fetchone()['n']
-        if count>=limit(provider):
+        conn.execute('INSERT OR IGNORE INTO external_api_daily_counters VALUES (?,?,?,0)',
+           (case_id,provider,day))
+        changed=conn.execute(
+           'UPDATE external_api_daily_counters SET used=used+1 WHERE case_id=? AND provider=? AND day=? AND used<?',
+           (case_id,provider,day,limit(provider))).rowcount
+        if changed!=1:
             raise HTTPException(429,'The daily per-case external-call cap for '+provider+' has been reached.')
+        now_used=conn.execute(
+           'SELECT used FROM external_api_daily_counters WHERE case_id=? AND provider=? AND day=?',
+           (case_id,provider,day)).fetchone()['used']
         conn.execute('INSERT INTO external_api_call_ledger VALUES (?,?,?,?,?)',
            (secrets.token_hex(12),case_id,provider,datetime.now(timezone.utc).isoformat(timespec='seconds'),user_id))
-    return {'provider':provider,'reservedToday':count+1,'dailyCap':limit(provider)}
+    return {'provider':provider,'reservedToday':now_used,'dailyCap':limit(provider)}
 
 def record(provider,outcome,latency_ms=0,http_status=None):
     if provider not in PROVIDERS:return
@@ -57,8 +63,8 @@ def guard(provider):
 def case_budget(case_id:str,actor=Depends(core.actor_from_cookie)):
     with db.connect() as conn:
         core.case_or_404(conn,case_id,actor)
-        rows=[dict(x) for x in conn.execute('SELECT provider,count(*) n FROM external_api_call_ledger '
-            'WHERE case_id=? AND reserved_at>=? GROUP BY provider',
+        rows=[dict(x) for x in conn.execute(
+            'SELECT provider,used n FROM external_api_daily_counters WHERE case_id=? AND day=?',
             (case_id,datetime.now(timezone.utc).date().isoformat()))]
     used={x['provider']:x['n'] for x in rows}
     return {'caseId':case_id,'dailyCallReservations':[{
