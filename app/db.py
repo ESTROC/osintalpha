@@ -550,6 +550,17 @@ CREATE TABLE IF NOT EXISTS source_custody_access (
  occurred_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS source_custody_access_case ON source_custody_access(case_id,artifact_id,occurred_at);
+CREATE TABLE IF NOT EXISTS case_review_obligations (
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ trigger_kind TEXT NOT NULL,trigger_id TEXT NOT NULL,
+ task_id TEXT NOT NULL REFERENCES investigation_tasks(id) ON DELETE CASCADE,
+ PRIMARY KEY(case_id,trigger_kind,trigger_id)
+);
+CREATE TABLE IF NOT EXISTS case_investigation_templates (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ template_id TEXT NOT NULL,version INTEGER NOT NULL,
+ selected_by TEXT NOT NULL REFERENCES users(id),selected_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

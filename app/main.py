@@ -1221,6 +1221,10 @@ def create_claim(case_id:str,body:ClaimInput,actor=Depends(protect)):
         claim_id=uid()
         c.execute('INSERT INTO claim_links VALUES (?,?,?,?,?,?,?)',
           (claim_id,case_id,body.evidence_id,body.claim_text.strip(),body.stance,actor['id'],iso_now()))
+        from .analyst_governance import queue
+        queue(c,case_id,actor['id'],'uncited_claim',claim_id,
+          'Review new claim and bind original quotation',
+          'Source-linked claim '+claim_id+' requires an exact passage, independent namesake checks and reviewer acknowledgement.')
     return {'id':claim_id}
 
 @app.get('/api/cases/{case_id}/claims')
@@ -1429,6 +1433,10 @@ app.include_router(provider_reliability_router)
 # Immutable-original metadata/custody audit and reviewed source export.
 from .custody_export import router as custody_export_router
 app.include_router(custody_export_router)
+
+# Automatic source/identity review obligations and non-privilege-granting templates.
+from .analyst_governance import router as analyst_governance_router
+app.include_router(analyst_governance_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
