@@ -35,8 +35,30 @@ async def lifespan(_app):
 
 app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='8.0.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
-AUTH_TRIES = {}
+AUTH_TRIES = {}  # Legacy compatibility only; never used for security decisions.
 SESSION_LENGTH = 60 * 60 * 8
+AUTH_FAILURE_WINDOW = 900
+AUTH_FAILURE_CAP = 8
+
+def auth_bucket(text):
+    # HMAC deliberately uses the configured admin secret to avoid storing raw
+    # account names or the socket peer address in the failed-login ledger.
+    import hmac
+    secret=os.environ.get('OSINTALPHA_ADMIN_PASSWORD','').encode()
+    if len(secret)<12:
+        raise RuntimeError('Authentication requires a valid admin secret.')
+    return hmac.new(secret, str(text).encode(),hashlib.sha256).hexdigest()
+
+def persistent_auth_window(conn,username,socket_peer,now):
+    account=auth_bucket('account:'+username.strip().casefold())
+    peer=auth_bucket('socket-peer:'+socket_peer)
+    conn.execute('DELETE FROM auth_failed_attempts WHERE observed_at<?',(now-AUTH_FAILURE_WINDOW,))
+    a=conn.execute('SELECT count(*) n FROM auth_failed_attempts WHERE account_digest=? AND observed_at>=?',
+        (account,now-AUTH_FAILURE_WINDOW)).fetchone()['n']
+    p=conn.execute('SELECT count(*) n FROM auth_failed_attempts WHERE peer_digest=? AND observed_at>=?',
+        (peer,now-AUTH_FAILURE_WINDOW)).fetchone()['n']
+    return account,peer,a,p
+
 
 
 def uid():
@@ -89,24 +111,31 @@ def health():
 
 @app.post('/api/auth/login')
 def login(body: Login, req: Request, response: Response):
-    address = req.client.host if req.client else 'unknown'
-    past = [t for t in AUTH_TRIES.get(address, []) if time.time()-t < 900]
-    AUTH_TRIES[address] = past
-    if len(past) >= 8:
-        raise HTTPException(429, 'Too many attempts; retry after 15 minutes.')
+    # Socket peer only: do NOT trust client-controlled X-Forwarded-For or X-Real-IP.
+    peer=req.client.host if req.client else 'unknown'
+    now=int(time.time())
     with db.connect() as c:
-        row = c.execute('SELECT * FROM users WHERE username=?', (body.username,)).fetchone()
-        if not row or not db.verify_password(body.password, row):
-            AUTH_TRIES[address].append(time.time())
-            raise HTTPException(401, 'Invalid username or password.')
-        token = secrets.token_urlsafe(40)
-        c.execute('INSERT INTO sessions VALUES (?,?,?)',
-                  (hashlib.sha256(token.encode()).hexdigest(), row['id'], int(time.time())+SESSION_LENGTH))
-    AUTH_TRIES[address] = []
-    response.set_cookie('osintalpha_session', token, httponly=True, samesite='strict',
-                        secure=os.getenv('OSINTALPHA_SECURE_COOKIE')=='1', max_age=SESSION_LENGTH, path='/')
+        account,source,account_count,peer_count=persistent_auth_window(c,body.username,peer,now)
+        if account_count>=AUTH_FAILURE_CAP or peer_count>=AUTH_FAILURE_CAP:
+            raise HTTPException(429,'Too many attempts; retry later.')
+        row=c.execute('SELECT * FROM users WHERE username=?',(body.username,)).fetchone()
+        matched=bool(row and db.verify_password(body.password,row))
+        if not matched:
+            c.execute('INSERT INTO auth_failed_attempts VALUES (?,?,?,?)',
+                (uid(),account,source,now))
+        else:
+            token=secrets.token_urlsafe(40)
+            c.execute('INSERT INTO sessions VALUES (?,?,?)',
+                (hashlib.sha256(token.encode()).hexdigest(),row['id'],now+SESSION_LENGTH))
+            c.execute('DELETE FROM auth_failed_attempts WHERE account_digest=? AND peer_digest=?',
+                (account,source))
+    if not matched:
+        raise HTTPException(401,'Invalid username or password.')
+    response.set_cookie('osintalpha_session',token,httponly=True,samesite='strict',
+        secure=os.getenv('OSINTALPHA_SECURE_COOKIE')=='1',
+        max_age=SESSION_LENGTH,path='/')
     write_audit(row['id'],'login','user',row['id'])
-    return {'user': {'username': row['username'], 'role':row['role']}}
+    return {'user':{'username':row['username'],'role':row['role']}}
 
 
 @app.post('/api/auth/logout')

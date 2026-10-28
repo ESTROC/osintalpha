@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS users (
  passhash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'analyst',
  active INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS auth_failed_attempts (
+ id TEXT PRIMARY KEY,
+ account_digest TEXT NOT NULL,
+ peer_digest TEXT NOT NULL,
+ observed_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_failed_attempts_account ON auth_failed_attempts(account_digest,observed_at);
+CREATE INDEX IF NOT EXISTS auth_failed_attempts_peer ON auth_failed_attempts(peer_digest,observed_at);
 CREATE TABLE IF NOT EXISTS sessions (
  token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at BIGINT NOT NULL
 );
