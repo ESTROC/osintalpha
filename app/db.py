@@ -543,6 +543,13 @@ CREATE TABLE IF NOT EXISTS provider_contract_canaries (
  checked_by TEXT NOT NULL REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS provider_canary_history ON provider_contract_canaries(provider,checked_at);
+CREATE TABLE IF NOT EXISTS source_custody_access (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ artifact_id TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES users(id),
+ access_kind TEXT NOT NULL,original_sha256 TEXT NOT NULL,
+ occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS source_custody_access_case ON source_custody_access(case_id,artifact_id,occurred_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

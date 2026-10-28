@@ -1426,6 +1426,10 @@ app.include_router(source_contracts_router)
 from .provider_reliability import router as provider_reliability_router
 app.include_router(provider_reliability_router)
 
+# Immutable-original metadata/custody audit and reviewed source export.
+from .custody_export import router as custody_export_router
+app.include_router(custody_export_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)

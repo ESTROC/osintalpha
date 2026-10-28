@@ -84,6 +84,8 @@ def add_source_artifact(case_id:str,evidence_id:str,body:ArtifactIntake,
            (archive_id,case_id,evidence_id,capture_id,body.evidence_url,body.asset_kind,
             original_hash,len(data),base64.b64encode(data).decode('ascii'),
             extracted_hash,stamp,expires,actor['id']))
+        from .custody_export import custody_event
+        custody_event(c,case_id,archive_id,actor['id'],'original_ingested',original_hash)
     core.write_audit(actor['id'],'source_artifact_intake','evidence',evidence_id,archive_id)
     return {'id':archive_id,'originalSha256':original_hash,'bytes':len(data),
             'kind':body.asset_kind,'captureId':capture_id,
@@ -117,6 +119,9 @@ def get_original_artifact(case_id:str,artifact_id:str,actor=Depends(core.actor_f
     data=base64.b64decode(item['content_b64'])
     if hashlib.sha256(data).hexdigest()!=item['original_sha256']:
         raise HTTPException(409,'Stored original hash mismatch; do not rely on this artifact.')
+    with db.connect() as conn:
+        from .custody_export import custody_event
+        custody_event(conn,case_id,artifact_id,actor['id'],'original_download_verified',item['original_sha256'])
     return Response(data,media_type='application/octet-stream',
         headers={'Content-Disposition':'attachment; filename="case-evidence.'+item['asset_kind']+'"',
         'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
