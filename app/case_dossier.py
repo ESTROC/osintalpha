@@ -15,6 +15,33 @@ from .portfolio import classify_url
 from .source_quality import expiration
 router=APIRouter()
 
+def licensed_preview(record):
+    """Only explicitly licensed Wikimedia Commons image metadata; no search-face guesses."""
+    import json
+    from urllib.parse import urlsplit
+    try:raw=json.loads(record.get('raw_json') or '{}')
+    except (TypeError,ValueError):return None
+    if not isinstance(raw,dict):return None
+    media=str(raw.get('thumbnail_url') or '')
+    credit=str(raw.get('thumbnail_credit') or '')[:180]
+    license_name=str(raw.get('thumbnail_license') or '').upper().strip()
+    license_link=str(raw.get('thumbnail_license_url') or '')
+    try:
+        p=urlsplit(media);lic=urlsplit(license_link)
+    except ValueError:return None
+    accepted={'CC0-1.0','CC-BY-4.0','CC-BY-SA-4.0'}
+    if license_name not in accepted or not credit or not media.startswith('https://'):
+        return None
+    if p.hostname!='upload.wikimedia.org' or not p.path.startswith('/wikipedia/commons/'):
+        return None
+    if lic.scheme!='https' or lic.hostname not in {'creativecommons.org','commons.wikimedia.org'}:
+        return None
+    if p.username or p.password or p.port not in (None,443):return None
+    return {'url':media[:600],'credit':credit,'license':license_name,
+        'licenseUrl':license_link[:600],
+        'subjectIdentityVerified':False,
+        'sourceMediaNotPersonIdentification':True}
+
 def _format_source(record,question):
     query=set(words(question))
     title=set(words(record.get('label') or ''))
@@ -27,7 +54,7 @@ def _format_source(record,question):
        'id':record['id'],'provider':record['provider'],'label':record['label'],
        'summary':record['summary'][:550],'sourceUrl':record['source_url'],
        'reviewStatus':status,'fetchedAt':record['fetched_at'],
-       'sourceClass':source_class,
+       'sourceClass':source_class,'licensedThumbnail':licensed_preview(record),
        'datePolicy':expiration(record['provider'],record['fetched_at']),
        'rankingExplanation':{
           'matchedQuestionTerms':terms,
