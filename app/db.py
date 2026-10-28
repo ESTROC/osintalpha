@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS auth_failed_attempts (
 );
 CREATE INDEX IF NOT EXISTS auth_failed_attempts_account ON auth_failed_attempts(account_digest,observed_at);
 CREATE INDEX IF NOT EXISTS auth_failed_attempts_peer ON auth_failed_attempts(peer_digest,observed_at);
+CREATE TABLE IF NOT EXISTS user_security_state (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ must_change_password INTEGER NOT NULL DEFAULT 0,
+ password_changed_at TEXT,
+ changed_by TEXT
+);
 CREATE TABLE IF NOT EXISTS sessions (
  token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at BIGINT NOT NULL
 );

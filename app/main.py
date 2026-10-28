@@ -74,11 +74,15 @@ def actor_from_cookie(req: Request):
     if not token:
         raise HTTPException(401, 'Please sign in.')
     with db.connect() as c:
-        row = c.execute('''SELECT u.id,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id
+        row = c.execute('''SELECT u.id,u.username,u.role,COALESCE(p.must_change_password,0) must_change_password
+            FROM sessions s JOIN users u ON u.id=s.user_id
+            LEFT JOIN user_security_state p ON p.user_id=u.id
             WHERE s.token_hash=? AND s.expires_at>? AND u.active=1''',
             (hashlib.sha256(token.encode()).hexdigest(), int(time.time()))).fetchone()
     if not row:
         raise HTTPException(401, 'Session expired. Sign in again.')
+    if row['must_change_password'] and req.url.path not in ('/api/auth/me','/api/auth/change-password','/api/auth/logout'):
+        raise HTTPException(403,'Password rotation is required before accessing case data.')
     return dict(row)
 
 
@@ -87,6 +91,12 @@ def protect(req: Request, actor=Depends(actor_from_cookie)):
         raise HTTPException(403, 'CSRF check failed.')
     return actor
 
+
+def _user_rotation_required(user_id):
+    with db.connect() as conn:
+        row=conn.execute('SELECT must_change_password FROM user_security_state WHERE user_id=?',
+            (user_id,)).fetchone()
+        return bool(row and row['must_change_password'])
 
 class Login(BaseModel):
     username: str = Field(min_length=2, max_length=60)
@@ -118,7 +128,7 @@ def login(body: Login, req: Request, response: Response):
         account,source,account_count,peer_count=persistent_auth_window(c,body.username,peer,now)
         if account_count>=AUTH_FAILURE_CAP or peer_count>=AUTH_FAILURE_CAP:
             raise HTTPException(429,'Too many attempts; retry later.')
-        row=c.execute('SELECT * FROM users WHERE username=?',(body.username,)).fetchone()
+        row=c.execute('SELECT * FROM users WHERE username=? AND active=1',(body.username,)).fetchone()
         matched=bool(row and db.verify_password(body.password,row))
         if not matched:
             c.execute('INSERT INTO auth_failed_attempts VALUES (?,?,?,?)',
@@ -135,7 +145,8 @@ def login(body: Login, req: Request, response: Response):
         secure=os.getenv('OSINTALPHA_SECURE_COOKIE')=='1',
         max_age=SESSION_LENGTH,path='/')
     write_audit(row['id'],'login','user',row['id'])
-    return {'user':{'username':row['username'],'role':row['role']}}
+    return {'user':{'username':row['username'],'role':row['role']},
+            'mustChangePassword':bool(_user_rotation_required(row['id']))}
 
 
 @app.post('/api/auth/logout')
@@ -149,7 +160,8 @@ def logout(req: Request, response: Response, actor=Depends(protect)):
 
 @app.get('/api/auth/me')
 def me(actor=Depends(actor_from_cookie)):
-    return {'user':actor,'aiConfigured':bool(os.getenv('XAI_API_KEY')),
+    return {'user':actor,'mustChangePassword':bool(actor.get('must_change_password')),
+            'aiConfigured':bool(os.getenv('XAI_API_KEY')),
             'tflConfigured':bool(os.getenv('TFL_APP_KEY')),
             'groqConfigured':bool(os.getenv('GROQ_API_KEY'))}
 
@@ -1356,6 +1368,10 @@ app.include_router(reviewed_report_router)
 # Auditable external-call reservations and observed provider health.
 from .provider_ops import router as provider_ops_router
 app.include_router(provider_ops_router)
+
+# Credential rotation, user revocation and explicit MFA/SSO security posture.
+from .account_security import router as account_security_router
+app.include_router(account_security_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
