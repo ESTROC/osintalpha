@@ -31,3 +31,40 @@ jobs:
       - run: node tests/console_p1_clarification_smoke.cjs
       - run: node tests/console_clarification_smoke.cjs
       - run: node --check static/app.js
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b
+          pip install -r requirements.txt 'playwright>=1.48,<2'
+          python -m playwright install --with-deps chromium
+      - name: Start isolated synthetic backend
+        env:
+          OSINTALPHA_ADMIN_PASSWORD: SyntheticBrowserCasePassword2026
+          OSINTALPHA_DB_PATH: /tmp/osintalpha-browser-test.sqlite
+          OSINTALPHA_SECURE_COOKIE: '0'
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > /tmp/osintalpha-browser.log 2>&1 &
+          for n in $(seq 1 35); do
+            curl -fsS http://127.0.0.1:8765/api/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/api/health
+      - name: Real Chromium desktop/mobile and report acceptance
+        env:
+          OSINTALPHA_BROWSER_BASE: http://127.0.0.1:8765
+          OSINTALPHA_ADMIN_PASSWORD: SyntheticBrowserCasePassword2026
+        run: pytest -q tests/test_browser_acceptance.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: osintalpha-browser-acceptance
+          path: artifacts/browser/
+          if-no-files-found: ignore

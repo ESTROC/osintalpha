@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS users (
  passhash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'analyst',
  active INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS auth_failed_attempts (
+ id TEXT PRIMARY KEY,
+ account_digest TEXT NOT NULL,
+ peer_digest TEXT NOT NULL,
+ observed_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_failed_attempts_account ON auth_failed_attempts(account_digest,observed_at);
+CREATE INDEX IF NOT EXISTS auth_failed_attempts_peer ON auth_failed_attempts(peer_digest,observed_at);
 CREATE TABLE IF NOT EXISTS sessions (
  token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at BIGINT NOT NULL
 );
@@ -424,6 +432,30 @@ CREATE TABLE IF NOT EXISTS time_qualified_affiliations (
  created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS affiliations_case ON time_qualified_affiliations(case_id,candidate_id,created_at);
+CREATE TABLE IF NOT EXISTS candidate_refinements (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ candidate_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+ original_question TEXT NOT NULL,clue_kind TEXT NOT NULL,
+ clue_value TEXT NOT NULL,search_query TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS candidate_refinements_case ON candidate_refinements(case_id,candidate_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS external_api_call_ledger (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,reserved_at TEXT NOT NULL,
+ by_user TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS external_api_usage_case ON external_api_call_ledger(case_id,provider,reserved_at);
+CREATE TABLE IF NOT EXISTS external_api_daily_counters (
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,day TEXT NOT NULL,used INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(case_id,provider,day)
+);
+CREATE TABLE IF NOT EXISTS provider_health_events (
+ id TEXT PRIMARY KEY,provider TEXT NOT NULL,outcome TEXT NOT NULL,
+ status_code INTEGER,latency_ms INTEGER NOT NULL,observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS provider_health_index ON provider_health_events(provider,observed_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

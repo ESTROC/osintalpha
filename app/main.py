@@ -35,8 +35,30 @@ async def lifespan(_app):
 
 app = FastAPI(title='OSINT Alpha Intelligence Workbench', version='8.0.0', docs_url='/api/docs', redoc_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=str(ROOT/'static')), name='assets')
-AUTH_TRIES = {}
+AUTH_TRIES = {}  # Legacy compatibility only; never used for security decisions.
 SESSION_LENGTH = 60 * 60 * 8
+AUTH_FAILURE_WINDOW = 900
+AUTH_FAILURE_CAP = 8
+
+def auth_bucket(text):
+    # HMAC deliberately uses the configured admin secret to avoid storing raw
+    # account names or the socket peer address in the failed-login ledger.
+    import hmac
+    secret=os.environ.get('OSINTALPHA_ADMIN_PASSWORD','').encode()
+    if len(secret)<12:
+        raise RuntimeError('Authentication requires a valid admin secret.')
+    return hmac.new(secret, str(text).encode(),hashlib.sha256).hexdigest()
+
+def persistent_auth_window(conn,username,socket_peer,now):
+    account=auth_bucket('account:'+username.strip().casefold())
+    peer=auth_bucket('socket-peer:'+socket_peer)
+    conn.execute('DELETE FROM auth_failed_attempts WHERE observed_at<?',(now-AUTH_FAILURE_WINDOW,))
+    a=conn.execute('SELECT count(*) n FROM auth_failed_attempts WHERE account_digest=? AND observed_at>=?',
+        (account,now-AUTH_FAILURE_WINDOW)).fetchone()['n']
+    p=conn.execute('SELECT count(*) n FROM auth_failed_attempts WHERE peer_digest=? AND observed_at>=?',
+        (peer,now-AUTH_FAILURE_WINDOW)).fetchone()['n']
+    return account,peer,a,p
+
 
 
 def uid():
@@ -89,24 +111,31 @@ def health():
 
 @app.post('/api/auth/login')
 def login(body: Login, req: Request, response: Response):
-    address = req.client.host if req.client else 'unknown'
-    past = [t for t in AUTH_TRIES.get(address, []) if time.time()-t < 900]
-    AUTH_TRIES[address] = past
-    if len(past) >= 8:
-        raise HTTPException(429, 'Too many attempts; retry after 15 minutes.')
+    # Socket peer only: do NOT trust client-controlled X-Forwarded-For or X-Real-IP.
+    peer=req.client.host if req.client else 'unknown'
+    now=int(time.time())
     with db.connect() as c:
-        row = c.execute('SELECT * FROM users WHERE username=?', (body.username,)).fetchone()
-        if not row or not db.verify_password(body.password, row):
-            AUTH_TRIES[address].append(time.time())
-            raise HTTPException(401, 'Invalid username or password.')
-        token = secrets.token_urlsafe(40)
-        c.execute('INSERT INTO sessions VALUES (?,?,?)',
-                  (hashlib.sha256(token.encode()).hexdigest(), row['id'], int(time.time())+SESSION_LENGTH))
-    AUTH_TRIES[address] = []
-    response.set_cookie('osintalpha_session', token, httponly=True, samesite='strict',
-                        secure=os.getenv('OSINTALPHA_SECURE_COOKIE')=='1', max_age=SESSION_LENGTH, path='/')
+        account,source,account_count,peer_count=persistent_auth_window(c,body.username,peer,now)
+        if account_count>=AUTH_FAILURE_CAP or peer_count>=AUTH_FAILURE_CAP:
+            raise HTTPException(429,'Too many attempts; retry later.')
+        row=c.execute('SELECT * FROM users WHERE username=?',(body.username,)).fetchone()
+        matched=bool(row and db.verify_password(body.password,row))
+        if not matched:
+            c.execute('INSERT INTO auth_failed_attempts VALUES (?,?,?,?)',
+                (uid(),account,source,now))
+        else:
+            token=secrets.token_urlsafe(40)
+            c.execute('INSERT INTO sessions VALUES (?,?,?)',
+                (hashlib.sha256(token.encode()).hexdigest(),row['id'],now+SESSION_LENGTH))
+            c.execute('DELETE FROM auth_failed_attempts WHERE account_digest=? AND peer_digest=?',
+                (account,source))
+    if not matched:
+        raise HTTPException(401,'Invalid username or password.')
+    response.set_cookie('osintalpha_session',token,httponly=True,samesite='strict',
+        secure=os.getenv('OSINTALPHA_SECURE_COOKIE')=='1',
+        max_age=SESSION_LENGTH,path='/')
     write_audit(row['id'],'login','user',row['id'])
-    return {'user': {'username': row['username'], 'role':row['role']}}
+    return {'user':{'username':row['username'],'role':row['role']}}
 
 
 @app.post('/api/auth/logout')
@@ -568,12 +597,12 @@ def report_html(case_id:str,actor=Depends(actor_from_cookie)):
 @app.get('/api/cases/{case_id}/report.pdf')
 def report_pdf(case_id:str,actor=Depends(actor_from_cookie)):
     ca,ev,runs=load_report(case_id,actor)
+    from .pdf_worker import render_report_in_subprocess
     try:
-        from weasyprint import HTML
-        from fastapi.responses import Response as ApiResponse
-        data=HTML(string=build_html_report(ca,ev,runs)).write_pdf()
-    except (ImportError, OSError) as exc:
-        raise HTTPException(503,'PDF renderer not available; use the printable HTML report.') from exc
+        data=render_report_in_subprocess(build_html_report(ca,ev,runs))
+    except (RuntimeError,TimeoutError,ValueError) as exc:
+        raise HTTPException(503,'Bounded PDF worker failed; use the printable HTML report.') from exc
+    from fastapi.responses import Response as ApiResponse
     write_audit(actor['id'],'export','case',case_id,'PDF report')
     return ApiResponse(data,media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="osintalpha-{case_id}.pdf"','Cache-Control':'no-store'})
 
@@ -704,7 +733,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     live_brave={'sources':[], 'searchedNow':False}
     if body.brave_context:
         from .brave_context import retrieve
-        live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang)
+        live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang,actor_id=actor['id'])
     from .retrieval import rank_case_evidence
     selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
     records=chat_evidence(selected)
@@ -764,11 +793,17 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         messages+=history+[{'role':'user','content':question}]
         payload={'model':model,'input':messages,'max_output_tokens':1600,'store':False}
         endpoint='https://api.x.ai/v1/responses'
+    from .provider_ops import guard as provider_guard, reserve as reserve_paid_call, record as record_health
+    call_class='groq' if provider=='groq' else 'xai'
+    provider_guard(call_class)
+    reserve_paid_call(case_id,actor['id'],call_class)
+    started_remote=time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=35 if body.brave_context else 45,follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=26,follow_redirects=False,trust_env=False) as client:
             resp=await client.post(endpoint,json=payload,
                         headers={'Authorization':f'Bearer {key}'})
             resp.raise_for_status()
+            record_health(call_class,'ok',int((time.monotonic()-started_remote)*1000),getattr(resp,'status_code',200))
             data=resp.json()
         if provider=='groq':
             choices=data.get('choices',[])
@@ -906,12 +941,15 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 'note':'Fresh web extracts are attributed leads, not verified identities or independently proven claims.'}
     except httpx.HTTPStatusError as exc:
         code=exc.response.status_code
+        record_health(call_class,'throttled' if code==429 else 'unavailable' if code>=500 else 'error',
+                      int((time.monotonic()-started_remote)*1000),code)
         if code==401: message='The provider rejected the API key. Check its key and account.'
         elif code==429: message='Provider rate limit or quota reached. Check billing and usage.'
         elif code==400: message='Provider rejected the model or request. Check GROQ_MODEL / XAI_MODEL.'
         else: message=f'Provider HTTP {code}. Review backend logs and provider status.'
         raise HTTPException(502,provider+' request failed: '+message) from exc
     except (httpx.HTTPError,ValueError) as exc:
+        record_health(call_class,'unavailable',int((time.monotonic()-started_remote)*1000))
         raise HTTPException(502,provider+' request unavailable: '+type(exc).__name__) from exc
 
 
@@ -1306,6 +1344,18 @@ app.include_router(client_progress_router)
 # Answer-first case dossier and first-class claim quotation drilldown.
 from .case_dossier import router as case_dossier_router
 app.include_router(case_dossier_router)
+
+# In-case analyst-controlled candidate pivots with preserved original research question.
+from .candidate_refinement import router as candidate_refinement_router
+app.include_router(candidate_refinement_router)
+
+# Reviewed-excerpt report preview and explicit pending-approval draft acceptance.
+from .reviewed_report import router as reviewed_report_router
+app.include_router(reviewed_report_router)
+
+# Auditable external-call reservations and observed provider health.
+from .provider_ops import router as provider_ops_router
+app.include_router(provider_ops_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router

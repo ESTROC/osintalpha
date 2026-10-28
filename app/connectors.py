@@ -65,19 +65,52 @@ class AdapterError(Exception):
 
 
 async def get_json(client: httpx.AsyncClient, url: str, params: dict | None = None):
-    try:
-        r = await client.get(url, params=params)
-        r.raise_for_status()
-        return r.json()
-    except httpx.HTTPStatusError as exc:
-        code = exc.response.status_code
-        if code == 429 or code == 403:
-            raise AdapterError(f'Provider denied or rate-limited the request (HTTP {code}).') from exc
-        raise AdapterError(f'Provider returned HTTP {code}.') from exc
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as exc:
-        raise AdapterError(f'Provider unavailable: {type(exc).__name__}.') from exc
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise AdapterError('Provider returned invalid JSON.') from exc
+    """One bounded 429/503 retry for idempotent official-source GETs.
+
+    Retries stop after one extra request; 401/403 are never retried.
+    Provider cooldown telemetry cannot prove a contractual SLA.
+    """
+    import asyncio,random,time
+    from urllib.parse import urlsplit
+    from .provider_ops import cooling,record
+    domain=(urlsplit(url).hostname or '').casefold()
+    known={
+      'api.github.com':'github','api.stackexchange.com':'stackoverflow',
+      'api.openalex.org':'openalex','api.crossref.org':'crossref',
+      'api.gleif.org':'gleif','query.wikidata.org':'wikidata',
+      'www.wikidata.org':'wikidata','en.wikipedia.org':'wikipedia',
+    }
+    name=known.get(domain,'gdelt' if domain.endswith('gdeltproject.org') else None)
+    if name and cooling(name):
+        raise AdapterError('Provider is temporarily cooling down following repeated throttling.')
+    for attempt in range(2):
+        started=time.monotonic()
+        try:
+            r=await client.get(url,params=params)
+            r.raise_for_status()
+            data=r.json()
+            if name:record(name,'ok',int((time.monotonic()-started)*1000),getattr(r,'status_code',200))
+            return data
+        except httpx.HTTPStatusError as exc:
+            status=exc.response.status_code
+            if name:record(name,'throttled' if status==429 else 'unavailable' if status>=500 else 'error',
+                           int((time.monotonic()-started)*1000),status)
+            if status in (429,503) and attempt==0:
+                # Do not sleep beyond a small fixed bound in the API request.
+                raw=str(exc.response.headers.get('Retry-After','0'))
+                try:delay=min(1.4,max(0.0,float(raw)))
+                except ValueError:delay=0.0
+                await asyncio.sleep(max(0.1,delay)+random.uniform(0.0,0.15))
+                continue
+            if status in (403,429):
+                raise AdapterError(f'Provider denied or rate-limited the request (HTTP {status}).') from exc
+            raise AdapterError(f'Provider returned HTTP {status}.') from exc
+        except (httpx.TimeoutException,httpx.ConnectError,httpx.NetworkError) as exc:
+            if name:record(name,'unavailable',int((time.monotonic()-started)*1000))
+            raise AdapterError(f'Provider unavailable: {type(exc).__name__}.') from exc
+        except (ValueError,json.JSONDecodeError) as exc:
+            if name:record(name,'error',int((time.monotonic()-started)*1000))
+            raise AdapterError('Provider returned invalid JSON.') from exc
 
 
 async def github(client, query, subject_type):
@@ -440,7 +473,7 @@ async def internetdb(client, query, kind):
         res.raise_for_status()
         obj=res.json()
     except httpx.HTTPStatusError as exc:
-        raise AdapterError('Shodan InternetDB returned HTTP '+str(exc.response.status_code)) from exc
+        raise AdapterError('Shodan InternetDB returned HTTP '+str(exc.getattr(response,'status_code',200))) from exc
     except (httpx.TimeoutException,httpx.ConnectError,httpx.NetworkError) as exc:
         raise AdapterError('InternetDB unavailable: '+type(exc).__name__) from exc
     except ValueError as exc:
