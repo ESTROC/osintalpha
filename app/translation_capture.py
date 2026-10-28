@@ -44,7 +44,7 @@ def record_translation(case_id:str,body:TranslationCaptureReview,actor=Depends(c
         if text[body.source_start:body.source_end]!=body.original_text:
             raise HTTPException(422,'Original passage does not match the saved source at those offsets.')
         ident=core.uid()
-        conn.execute('INSERT INTO translation_capture_reviews VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        conn.execute('INSERT INTO translation_capture_reviews VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
           (ident,case_id,body.evidence_id,body.capture_id,cap['content_sha256'],
            body.source_start,body.source_end,body.original_text,body.translated_text,
            body.language_from,body.language_to,body.method,'human-attested-v1',

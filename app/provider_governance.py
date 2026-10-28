@@ -28,8 +28,8 @@ class RightsReview(BaseModel):
 def provider_governance(actor=Depends(core.actor_from_cookie)):
     with db.connect() as c:
         reviews={r['provider']:dict(r) for r in c.execute('SELECT * FROM provider_terms_reviews')}
-    return {'items':[{'id':p.id,'name':p.title,'countryCoverage':COVERAGE[p.id][0],
-       'jurisdictionAuthority':COVERAGE[p.id][1],
+    return {'items':[{'id':p.id,'name':p.title,'countryCoverage':COVERAGE.get(p.id,('unknown','No established jurisdiction authority'))[0],
+       'jurisdictionAuthority':COVERAGE.get(p.id,('unknown','No established jurisdiction authority'))[1],
        'rightsStatus':reviews.get(p.id,{}).get('rights_status','not_reviewed'),
        'approvedPurposes':reviews.get(p.id,{}).get('permitted_uses',''),
        'termsReference':reviews.get(p.id,{}).get('terms_url'),
