@@ -4,7 +4,7 @@ All returned identity/entity labels remain analyst hypotheses. This module never
 spins up OpenAleph/FTM, OpenCTI, IntelOwl, ArchiveBox or network replay.
 """
 from __future__ import annotations
-import base64, hashlib, json, re
+import base64, hashlib, hmac, json, re
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -155,7 +155,7 @@ def warc_inspection(case_id:str,artifact_id:str,actor=Depends(core.actor_from_co
     try:blob=base64.b64decode(item["content_b64"],validate=True)
     except ValueError as exc:raise HTTPException(409,"Invalid retained archive bytes.") from exc
     digest=hashlib.sha256(blob).hexdigest()
-    if not hashlib.compare_digest(digest,item["original_sha256"]):
+    if not hmac.compare_digest(digest,item["original_sha256"]):
         raise HTTPException(409,"WARC original integrity mismatch.")
     if not blob.startswith((b"WARC/1.0\r\n",b"WARC/1.1\r\n")):
         raise HTTPException(409,"Unknown original WARC signature.")
