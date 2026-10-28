@@ -496,6 +496,30 @@ CREATE TABLE IF NOT EXISTS case_preservation_policy (
  reviewed_by TEXT NOT NULL REFERENCES users(id),
  reviewed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS case_public_events (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT NOT NULL REFERENCES source_captures(id) ON DELETE CASCADE,
+ quoted_passage TEXT NOT NULL,observed_date TEXT,published_date TEXT,
+ event_label TEXT NOT NULL,review_note TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS case_public_events_case ON case_public_events(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS organization_relation_dates (
+ relation_id TEXT PRIMARY KEY REFERENCES sourced_relationships(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ left_kind TEXT NOT NULL,right_kind TEXT NOT NULL,
+ valid_from TEXT,valid_until TEXT,contradiction_note TEXT NOT NULL,
+ reviewer_id TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS public_org_place_points (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ place_name TEXT NOT NULL,latitude REAL NOT NULL,longitude REAL NOT NULL,
+ publisher_date TEXT,precision TEXT NOT NULL,review_status TEXT NOT NULL,
+ annotation TEXT NOT NULL,recorded_by TEXT NOT NULL REFERENCES users(id),recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS public_org_place_case ON public_org_place_points(case_id,recorded_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

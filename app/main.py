@@ -1406,6 +1406,10 @@ app.include_router(data_protection_router)
 from .analyst_views import router as analyst_views_router
 app.include_router(analyst_views_router)
 
+# Source-quoted chronology, organization-only relationship dates and reviewed public place points.
+from .public_event_graph import router as public_event_graph_router
+app.include_router(public_event_graph_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
