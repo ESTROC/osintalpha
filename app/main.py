@@ -1470,6 +1470,10 @@ app.include_router(case_presentation_router)
 from .export_controls import router as export_controls_router
 app.include_router(export_controls_router)
 
+# Explicit, source-stage-aware empty states and next safe analyst actions.
+from .next_steps import router as next_steps_router
+app.include_router(next_steps_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
