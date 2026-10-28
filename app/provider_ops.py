@@ -33,7 +33,7 @@ def record(provider,outcome,latency_ms=0,http_status=None):
         with db.connect() as conn:
             conn.execute('INSERT INTO provider_health_events VALUES (?,?,?,?,?,?)',
                (secrets.token_hex(12),provider,outcome,http_status,max(0,min(120000,int(latency_ms))),
-                datetime.now(timezone.utc).isoformat(timespec='seconds')))
+                datetime.now(timezone.utc).isoformat(timespec='microseconds')))
     except Exception:
         # Telemetry failures cannot block legitimate research or leak source data.
         pass

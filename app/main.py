@@ -803,7 +803,7 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             resp=await client.post(endpoint,json=payload,
                         headers={'Authorization':f'Bearer {key}'})
             resp.raise_for_status()
-            record_health(call_class,'ok',int((time.monotonic()-started_remote)*1000),resp.status_code)
+            record_health(call_class,'ok',int((time.monotonic()-started_remote)*1000),getattr(resp,'status_code',200))
             data=resp.json()
         if provider=='groq':
             choices=data.get('choices',[])

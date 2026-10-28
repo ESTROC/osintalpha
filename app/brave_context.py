@@ -117,7 +117,7 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
                 **({'freshness':freshness} if freshness!='all' else {}),
             })
         response.raise_for_status()
-        record_health('brave_context','ok',int((time.monotonic()-started_remote)*1000),response.status_code)
+        record_health('brave_context','ok',int((time.monotonic()-started_remote)*1000),getattr(response,'status_code',200))
         payload = response.json()
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code

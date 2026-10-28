@@ -215,7 +215,7 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                                 **({'freshness':page_window['freshness']} if page_window['freshness']!='all' else {})},
                         headers={'X-Subscription-Token':key,'Accept':'application/json'})
                     response.raise_for_status()
-                    record_health('brave_web','ok',int((time.monotonic()-started_request)*1000),response.status_code)
+                    record_health('brave_web','ok',int((time.monotonic()-started_request)*1000),getattr(response,'status_code',200))
                     payload=response.json()
                     from .date_context import date_provenance
                     retrieved=core.iso_now()

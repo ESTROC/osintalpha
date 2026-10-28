@@ -89,7 +89,7 @@ async def get_json(client: httpx.AsyncClient, url: str, params: dict | None = No
             r=await client.get(url,params=params)
             r.raise_for_status()
             data=r.json()
-            if name:record(name,'ok',int((time.monotonic()-started)*1000),r.status_code)
+            if name:record(name,'ok',int((time.monotonic()-started)*1000),getattr(r,'status_code',200))
             return data
         except httpx.HTTPStatusError as exc:
             status=exc.response.status_code
@@ -473,7 +473,7 @@ async def internetdb(client, query, kind):
         res.raise_for_status()
         obj=res.json()
     except httpx.HTTPStatusError as exc:
-        raise AdapterError('Shodan InternetDB returned HTTP '+str(exc.response.status_code)) from exc
+        raise AdapterError('Shodan InternetDB returned HTTP '+str(exc.getattr(response,'status_code',200))) from exc
     except (httpx.TimeoutException,httpx.ConnectError,httpx.NetworkError) as exc:
         raise AdapterError('InternetDB unavailable: '+type(exc).__name__) from exc
     except ValueError as exc:
