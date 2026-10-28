@@ -1402,6 +1402,10 @@ app.include_router(preservation_router)
 from .data_protection import router as data_protection_router
 app.include_router(data_protection_router)
 
+# Source-backed answer comparison and stable cursor pagination.
+from .analyst_views import router as analyst_views_router
+app.include_router(analyst_views_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
