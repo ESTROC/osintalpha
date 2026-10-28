@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v7.9 unified public research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,budget:null,reviewedDraft:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,chronology:null,cursorSources:[],cursorNext:null,runEvolution:null,budget:null,reviewedDraft:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'Full name or public handle',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'Organization or registered business',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'Public domain name',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'Public IP address',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -409,17 +409,40 @@ function caseReports(){
 }
 
 function caseActivity(){
+ const chronological=(s.chronology?.items||[]).slice(0,40).map(x=>
+  '<div class="item-row"><div class="row-main"><strong>'+h(x.title)+'</strong><div class="item-sub">'+
+   link(x.sourceUrl,'Original source')+'</div><p class="meta">'+
+  'Event: '+h(x.eventDate||'unknown')+' · Published: '+h(x.publicationDate||'unknown')+
+  ' · Source observed: '+h(x.sourceObservedDate||'unknown')+
+  ' · Retrieved: '+h(x.retrievalDate||'unknown')+' · Reviewed: '+h(x.reviewDate||'unreviewed')+'</p>'+
+  (x.quotedPassage?'<blockquote>'+h(x.quotedPassage)+'</blockquote>':'')+
+  '<p class="help">This event has not been independently authenticated.</p></div></div>').join('');
+ const historyPanel='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><strong class="panel-title">Source-linked chronology</strong><span class="tag warn">Event dates are not retrieval dates</span></div>'+
+ (chronological||'<div class="empty">No dated source events yet; retrieval alone does not establish an event.</div>')+'</section>';
+ const page=(s.cursorSources||[]).map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.label)+'</strong>'+
+  '<div class="item-sub">'+h(x.provider)+' · '+h(x.status)+' · '+link(x.source_url,'Original page')+'</div></div></div>').join('');
+ const paging='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><strong class="panel-title">All source records · stable cursor pages</strong></div>'+
+ (page||'<div class="empty">No case sources to page through.</div>')+
+ '<div class="panel-pad">'+(s.cursorNext?'<button class="btn small" data-load-cursor>Load next 50 sources</button>':
+ '<p class="help">No further saved source pages.</p>')+
+ '<p class="help">New records will not shift an existing keyset page; records amended in-place may reorder.</p></div></section>';
+ const runDiff=s.runEvolution?'<section class="panel"><div class="panel-head"><strong class="panel-title">Recorded source changes, not factual retractions</strong></div>'+
+ (s.runEvolution.items||[]).slice(0,55).map(x=>'<div class="item-row"><div class="row-main">'+h(x.status)+
+ ' · '+link(x.sourceUrl,'Original')+'<p class="meta">'+h(x.olderCapturedAt||'no old capture')+
+ ' → '+h(x.newerCapturedAt||'no recent capture')+'</p></div></div>').join('')+
+ '<p class="help">A source absent from a new search might still exist online.</p></section>':'';
+
  const history=s.researchRuns||[],recent=s.case.runs||[],data=s.changes||{},
    runs=data.runs||[],events=data.items||[],summary=data.summary||{};
  const note='<p class="help">'+h(data.warning||'Provider records are not a complete web archive. Absence from a single search does not mean deletion.')+'</p>';
- const selector='<div class="form-row" style="align-items:end"><label class="field-label">Compare with research run<select id="compare-previous-run">'+runs.filter(x=>x.run_id!==data.currentRunId).map(r=>'<option value="'+h(r.run_id)+'" '+(r.run_id===data.previousRunId?'selected':'')+'>'+h(when(r.started_at))+' · '+r.query_count+' queries</option>').join('')+'</select></label><button type="button" class="btn small" data-compare-runs>Compare source records</button></div>';
+ const selector='<div class="form-row" style="align-items:end"><label class="field-label">Compare with research run<select id="compare-previous-run">'+runs.filter(x=>x.run_id!==data.currentRunId).map(r=>'<option value="'+h(r.run_id)+'" '+(r.run_id===data.previousRunId?'selected':'')+'>'+h(when(r.started_at))+' · '+r.query_count+' queries</option>').join('')+'</select></label><button type="button" class="btn small" data-compare-runs>Compare source records</button><button type="button" class="btn small subtle" data-run-evolution>Inspect captured source hashes</button></div>';
  const changes='<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div class="panel-title">Source changes between research runs</div><span class="tag accent">'+Number(data.totalCompared||0)+' compared</span></div>'+
  '<div class="panel-pad">'+selector+'<div class="badge-row"><span class="tag ok">'+Number(summary.changed||0)+' changed</span><span class="tag">'+Number(summary.new_to_comparison||0)+' new to comparison</span><span class="tag warn">'+Number(summary.not_returned||0)+' not returned</span><span class="tag">'+Number(summary.unchanged||0)+' unchanged</span></div>'+
  (data.comparedSameQueryScope?'':'<p class="help">Different source queries were used. Compare with caution: different query coverage creates false differences.</p>')+note+'</div>'+
  (events.length?events.slice(0,80).map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.label)+'</strong><div class="item-sub">'+h(x.provider)+' · '+link(x.url,'Original source')+'</div>'+
  (x.change==='changed'?'<p class="help"><strong>Earlier:</strong> '+h(x.previousSummary)+' <strong>Now:</strong> '+h(x.summary)+'</p>':'')+
  '</div><span class="tag '+(x.change==='changed'?'warn':'')+'">'+h(x.change.replaceAll('_',' '))+'</span></div>').join(''):'<div class="empty">No versioned observations to compare. Run public-source research twice to obtain a meaningful comparison.</div>')+'</section>';
- return '<div class="analyst-intro"><div><div class="eyebrow">AUDITABILITY / RECORDED SOURCE DIFFERENCES</div><h2>What changed since the last research?</h2><p>Compare each recorded source version and investigate material changes; do not treat missing API results as withdrawn records.</p></div><button class="btn small" data-collect>Repeat research ↻</button></div>'+
+ return historyPanel+paging+runDiff+'<div class="analyst-intro"><div><div class="eyebrow">AUDITABILITY / RECORDED SOURCE DIFFERENCES</div><h2>What changed since the last research?</h2><p>Compare each recorded source version and investigate material changes; do not treat missing API results as withdrawn records.</p></div><button class="btn small" data-collect>Repeat research ↻</button></div>'+
  changes+'<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div class="panel-title">Individual source queries ('+history.length+')</div><span class="panel-meta">LATEST 250</span></div>'+
  (history.length?history.map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.provider)+' · '+h(x.query_text)+'</strong><div class="item-sub">'+h(when(x.created_at))+' · '+h(x.message||'No details')+'</div></div><div class="badge-row">'+tag(x.status)+'<span class="tag">'+Number(x.returned_count)+' returned</span><span class="tag">'+Number(x.new_count)+' new</span></div></div>').join(''):
  '<div class="empty">No source queries executed. Begin from Overview.</div>')+'</section>'+
@@ -475,7 +498,7 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/?case='+encodeURIComponent(id));s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.budget=null;s.reviewedDraft=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
+async function openCase(id){if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/?case='+encodeURIComponent(id));s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.chronology=null;s.cursorSources=[];s.cursorNext=null;s.runEvolution=null;s.budget=null;s.reviewedDraft=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
  try{const saved=await api('/api/cases/'+id+'/search-plan');if(saved.available){s.smartPlan=saved.plan;s.smartQuestion=saved.question}}catch(e){/* Legacy case; no versioned plan */}s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
  // The initial case view needs only overview, conversation and provider state.
@@ -515,7 +538,7 @@ async function loadAdvancedCaseState(tab){
   evidence:['duplicate-sources','excerpts'],
   findings:['intelligence','excerpts','candidates'],
   reports:['intelligence','candidates'],
-  activity:['search-history','changes','research-history'],
+  activity:['search-history','changes','research-history','chronology','evidence-cursor'],
  }[tab]||[];
  const result=await Promise.all(endpoint.map(name=>api('/api/cases/'+id+'/'+name)));
  endpoint.forEach((name,i)=>{
@@ -533,6 +556,8 @@ async function loadAdvancedCaseState(tab){
   else if(name==='search-history')s.searchHistory=value.items||[];
   else if(name==='changes')s.changes=value;
   else if(name==='research-history')s.researchRuns=value.items||[];
+  else if(name==='chronology')s.chronology=value;
+  else if(name==='evidence-cursor'){s.cursorSources=value.items||[];s.cursorNext=value.nextCursor||null;}
  });
 }
 async function loadConversation(id){
@@ -713,7 +738,7 @@ async function refreshDossier(){
 async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.server=auth;if(auth.mustChangePassword){s.user.must_change_password=true;render();return}const [ca,ov,so,pr,cap]=await Promise.all([api('/api/cases'),api('/api/overview'),api('/api/sources'),api('/api/projects'),api('/api/capabilities')]);s.cases=ca.items||[];s.overview=ov;s.sources=so.items||[];s.projects=pr.items||[];s.capabilities=cap;if(s.user?.role==='admin')s.users=(await api('/api/users')).items;s.where='home';render();const fromUrl=(typeof window!=='undefined'&&window.location)?new URLSearchParams(window.location.search).get('case'):null;
 if(fromUrl&&/^[a-f0-9]{24}$/.test(fromUrl)){try{await openCase(fromUrl)}catch(e){toast('Saved case could not be reopened: '+e.message,true)}}
 }
-document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan],button[data-explain-claim],button[data-approve-report-draft],button[data-use-refinement]');if(!t)return;try{
+document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan],button[data-explain-claim],button[data-approve-report-draft],button[data-use-refinement],button[data-load-cursor],button[data-run-evolution]');if(!t)return;try{
 if(t.dataset.nav){s.where=t.dataset.nav;if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/');render();if(s.where==='world'&&s.geoStatus==='idle')await loadGeo()}
 else if(t.dataset.mode){s.mode=t.dataset.mode;s.where='home';render();document.getElementById('query')?.focus()}
 else if(t.dataset.tab){s.tab=t.dataset.tab;await loadAdvancedCaseState(s.tab);render()}
@@ -735,6 +760,19 @@ else if(t.hasAttribute('data-approve-report-draft')){
 else if(t.hasAttribute('data-use-refinement')){
  s.tab='assistant';render();const area=document.querySelector('#ask-form textarea');
  if(area){area.value=t.dataset.useRefinement;area.focus()}
+}
+else if(t.hasAttribute('data-load-cursor')){
+ if(!s.cursorNext)return;
+ const page=await api('/api/cases/'+s.id+'/evidence-cursor?limit=50&cursor='+encodeURIComponent(s.cursorNext));
+ s.cursorSources=[...(s.cursorSources||[]),...(page.items||[])];
+ s.cursorNext=page.nextCursor;render();
+}
+else if(t.hasAttribute('data-run-evolution')){
+ const newer=s.changes?.currentRunId,older=document.getElementById('compare-previous-run')?.value;
+ if(!newer||!older)throw Error('Run at least two source searches to compare their saved observations.');
+ s.runEvolution=await api('/api/cases/'+s.id+'/run-source-evolution?older_run='+encodeURIComponent(older)+
+   '&newer_run='+encodeURIComponent(newer));
+ render();
 }
 else if(t.hasAttribute('data-explain-claim')){
  s.claimDetail=await api('/api/cases/'+s.id+'/claims/'+encodeURIComponent(t.dataset.explainClaim)+'/explain');
