@@ -367,6 +367,9 @@ def delete_case(case_id:str,actor=Depends(protect)):
         case=case_or_404(c,case_id,actor)
         if actor['role']!='admin' and case['created_by']!=actor['id']:
             raise HTTPException(403,'Only the case owner or administrator can delete a case.')
+        hold=c.execute('SELECT legal_hold FROM case_preservation_policy WHERE case_id=?',(case_id,)).fetchone()
+        if hold and hold['legal_hold']:
+            raise HTTPException(409,'This case has an active preservation hold. Administrator review is required.')
         c.execute('DELETE FROM cases WHERE id=?',(case_id,))
     write_audit(actor['id'],'delete','case',case_id,'Deleted case and associated evidence')
     return {'ok':True}
@@ -1388,6 +1391,10 @@ app.include_router(alias_validity_router)
 # Case-bound human-reviewed original/translation with exact source offsets.
 from .translation_capture import router as translation_capture_router
 app.include_router(translation_capture_router)
+
+# Admin-controlled preservation holds and review-date preview; no automatic purge.
+from .preservation import router as preservation_router
+app.include_router(preservation_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
