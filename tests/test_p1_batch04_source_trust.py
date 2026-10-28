@@ -34,7 +34,7 @@ def test_062_conflict_review_cannot_cross_case(client,auth,case):
         'label':'Public memo','summary':'A source with a disputed claim',
         'source_url':'https://example.org/memo'}).json()['id']
     ids=[]
-    for stance in ('supports','refutes'):
+    for stance in ('supports','contradicts'):
         r=client.post(f'/api/cases/{case}/claims',headers=auth,json={
             'evidence_id':e,'claim_text':'Public event date','stance':stance})
         assert r.status_code==201,r.text
