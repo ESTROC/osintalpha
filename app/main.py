@@ -121,6 +121,8 @@ def health():
 
 @app.post('/api/auth/login')
 def login(body: Login, req: Request, response: Response):
+    if os.getenv('OSINTALPHA_REQUIRE_MFA')=='1':
+        raise HTTPException(503,'This installation requires phishing-resistant MFA, which is not configured. Refusing password-only login.')
     # Socket peer only: do NOT trust client-controlled X-Forwarded-For or X-Real-IP.
     peer=req.client.host if req.client else 'unknown'
     now=int(time.time())

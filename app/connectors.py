@@ -306,6 +306,17 @@ FUNCTIONS = {'wikidata':wikidata, 'gdelt':gdelt,'github': github, 'stackoverflow
 
 
 async def collect_one(provider, query, subject_type, client=None):
+    # Explicitly restricted publisher use must never be bypassed by other flows.
+    # An absent review is NOT a publisher license; track separately.
+    try:
+        from . import db
+        with db.connect() as rights_db:
+            review=rights_db.execute('SELECT rights_status,permitted_uses FROM provider_terms_reviews WHERE provider=?',(provider,)).fetchone()
+    except Exception:
+        review=None
+    if review and (review['rights_status']=='restricted' or
+         (review['rights_status']=='approved_limited' and 'live_queries' not in review['permitted_uses'].split(','))):
+        raise AdapterError('This provider is blocked by the current administrator-recorded source rights restriction.')
     connector = next((c for c in CATALOG if c.id == provider), None)
     if connector is None or subject_type not in connector.scope:
         raise AdapterError('Unknown source or incompatible subject type.')
