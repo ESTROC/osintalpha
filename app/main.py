@@ -1230,6 +1230,10 @@ app.include_router(entity_graph_router)
 from .source_archives import router as source_archives_router
 app.include_router(source_archives_router)
 
+# Bounded HEAD-only source availability observations, not automatic archiving.
+from .source_link_health import router as source_link_health_router
+app.include_router(source_link_health_router)
+
 # Human-recorded publisher ownership, institution references and claim disputes.
 from .source_trust import router as source_trust_router
 app.include_router(source_trust_router)

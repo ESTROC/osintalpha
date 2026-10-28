@@ -404,6 +404,15 @@ CREATE TABLE IF NOT EXISTS source_document_archives (
 );
 CREATE INDEX IF NOT EXISTS source_document_archives_case
  ON source_document_archives(case_id,evidence_id,stored_at);
+CREATE TABLE IF NOT EXISTS source_link_checks (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ original_url TEXT NOT NULL,request_method TEXT NOT NULL,
+ http_status INTEGER,check_state TEXT NOT NULL,
+ response_class TEXT NOT NULL,
+ checked_at TEXT NOT NULL,checked_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS source_link_checks_case ON source_link_checks(case_id,evidence_id,checked_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
