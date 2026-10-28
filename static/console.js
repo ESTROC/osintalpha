@@ -570,7 +570,7 @@ function commandPalette(){
  commands.map(x=>'<button type="button" class="btn command-row" data-command="'+h(x[0])+'">'+h(x[1])+'</button>').join('')+
  '<button type="button" class="btn small" data-command="close">Close</button></div></div>';
 }
-function render(){if(!s.user){login();return}if(s.user.must_change_password){app.innerHTML=requiredPasswordChange();return}app.innerHTML=frame(({home,cases,case:casePage,world,sources,settings,admin:administration}[s.where]||home)());if(s.where==='world'||s.where==='home')setTimeout(drawMap,0);if(s.where==='case'&&s.portfolioLocation&&(s.tab==='portfolio'||s.tab==='assistant'))setTimeout(drawPortfolioMap,0);if(s.paletteOpen)app.innerHTML+=commandPalette();if(s.where==='case'&&s.tab==='assistant'){const e=document.getElementById('chat-history');if(e)e.scrollTop=e.scrollHeight}}
+function render(){if(!s.user){login();return}if(s.user.must_change_password){app.innerHTML=requiredPasswordChange();return}app.innerHTML=frame(({home,cases,case:casePage,world,sources,settings,admin:administration}[s.where]||home)());if(s.where==='world'||s.where==='home')setTimeout(drawMap,0);if(s.where==='case'&&s.portfolioLocation&&(s.tab==='portfolio'||s.tab==='assistant'))setTimeout(drawPortfolioMap,0);if(s.paletteOpen){app.innerHTML+=commandPalette();document.getElementById('command-palette')?.querySelector('[data-command]')?.focus?.()}if(s.where==='case'&&s.tab==='assistant'){const e=document.getElementById('chat-history');if(e)e.scrollTop=e.scrollHeight}}
 async function refreshCases(){
  const params={q:s.caseSearch,status:s.caseStatus,subject_type:s.caseType,
   owner:s.caseOwner,date_from:s.caseFrom,date_to:s.caseTo,sort:s.caseSort,
