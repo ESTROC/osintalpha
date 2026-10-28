@@ -1446,6 +1446,10 @@ app.include_router(review_metrics_router)
 from .case_initial import router as case_initial_router
 app.include_router(case_initial_router)
 
+# Separate source-bound distribution approval; legacy reports stay draft exports.
+from .report_distribution import router as report_distribution_router
+app.include_router(report_distribution_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
