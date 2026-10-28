@@ -597,12 +597,12 @@ def report_html(case_id:str,actor=Depends(actor_from_cookie)):
 @app.get('/api/cases/{case_id}/report.pdf')
 def report_pdf(case_id:str,actor=Depends(actor_from_cookie)):
     ca,ev,runs=load_report(case_id,actor)
+    from .pdf_worker import render_report_in_subprocess
     try:
-        from weasyprint import HTML
-        from fastapi.responses import Response as ApiResponse
-        data=HTML(string=build_html_report(ca,ev,runs)).write_pdf()
-    except (ImportError, OSError) as exc:
-        raise HTTPException(503,'PDF renderer not available; use the printable HTML report.') from exc
+        data=render_report_in_subprocess(build_html_report(ca,ev,runs))
+    except (RuntimeError,TimeoutError,ValueError) as exc:
+        raise HTTPException(503,'Bounded PDF worker failed; use the printable HTML report.') from exc
+    from fastapi.responses import Response as ApiResponse
     write_audit(actor['id'],'export','case',case_id,'PDF report')
     return ApiResponse(data,media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="osintalpha-{case_id}.pdf"','Cache-Control':'no-store'})
 
