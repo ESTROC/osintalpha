@@ -36,6 +36,7 @@ def test_chromium_auth_case_report_keyboard_and_mobile():
         page.get_by_text('CASE ANSWER · PROVENANCE FIRST').wait_for(timeout=15000)
         assert page.get_by_text('Sortable, filterable public-source leads').count()>=1
         page.screenshot(path=str(out/'case-desktop.png'),full_page=True)
+        page.locator('button[data-tab="overview"]').focus()
         page.keyboard.press('Tab')
         focus=page.evaluate("document.activeElement?.tagName?.toLowerCase()")
         assert focus in ('button','a','input','select','summary','textarea')

@@ -69,7 +69,7 @@ async def cached_collection(case_id,provider,query,subject,*,runner,client=None,
         if len(saved.encode())>320_000:return result
         with db.connect() as conn:
             conn.execute("DELETE FROM provider_case_cache WHERE cache_key=?",(key,))
-            conn.execute("INSERT INTO provider_case_cache VALUES (?,?,?,?,?,?,?,?)",
+            conn.execute("INSERT INTO provider_case_cache VALUES (?,?,?,?,?,?,?,?,?)",
                 (key,case_id,provider,query,subject,VERSION,saved,now,now+TTL_SECONDS))
     except (ValueError,TypeError):
         return result
