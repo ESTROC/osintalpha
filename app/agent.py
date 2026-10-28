@@ -208,7 +208,9 @@ async def execute_provider(case,job,choice,actor_id,step_no):
                 'changed':out.get('changed',0),'message':'' if not out['errors'] else 'External web provider unavailable'}
     async with httpx.AsyncClient(timeout=16,headers={
         'User-Agent':'OSINTAlpha/7.0 controlled-investigation-research'},follow_redirects=False) as client:
-        records=await core.collect_one(provider,query,case['subject_type'],client)
+        from .provider_reliability import cached_collection
+        records=await cached_collection(case['id'],provider,query,case['subject_type'],
+                                        runner=core.collect_one,client=client)
     new=0;changed=0
     with db.connect() as c:
         for record in records[:50]:

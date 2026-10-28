@@ -400,8 +400,9 @@ async def collect(case_id:str, body:CollectInput, actor=Depends(protect)):
         require_scope_if_enabled(scope_db,case_id)
     allowed={s.id for s in CATALOG if case['subject_type'] in s.scope}
     if any(p not in allowed for p in providers): raise HTTPException(422,'Incompatible or unknown source selection.')
+    from .provider_reliability import cached_collection
     async with httpx.AsyncClient(timeout=15, headers={'User-Agent':'OSINT AlphaIntelligenceWorkbench/1.0 (authorized research)'},follow_redirects=False) as client:
-        responses=await asyncio.gather(*(collect_one(p,case['query'],case['subject_type'],client) for p in providers),return_exceptions=True)
+        responses=await asyncio.gather(*(cached_collection(case_id,p,case['query'],case['subject_type'],runner=collect_one,client=client) for p in providers),return_exceptions=True)
     from .lineage import save_observation
     run_id=uid()
     result=[]
@@ -1418,6 +1419,10 @@ app.include_router(media_governance_router)
 # Case-scoped rights-attested entity crosswalk, defensive connector preview and original source metadata.
 from .source_contracts import router as source_contracts_router
 app.include_router(source_contracts_router)
+
+# Case-scoped bounded public API cache and sanitized provider diagnostics.
+from .provider_reliability import router as provider_reliability_router
+app.include_router(provider_reliability_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
