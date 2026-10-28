@@ -7,3 +7,4 @@ python-dotenv>=1,<2
 pytest>=8,<10
 
 psycopg[binary]>=3.2,<4
+pypdf>=5.5,<7

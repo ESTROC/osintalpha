@@ -1226,6 +1226,10 @@ app.include_router(business_discovery_router)
 from .entity_graph import router as entity_graph_router
 app.include_router(entity_graph_router)
 
+# Explicit consented bounded original-document attachments; no unrestricted URL fetch.
+from .source_archives import router as source_archives_router
+app.include_router(source_archives_router)
+
 # Human-recorded publisher ownership, institution references and claim disputes.
 from .source_trust import router as source_trust_router
 app.include_router(source_trust_router)

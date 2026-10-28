@@ -392,6 +392,18 @@ CREATE TABLE IF NOT EXISTS claim_conflict_reviews (
  reviewer_id TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS claim_conflict_reviews_case ON claim_conflict_reviews(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS source_document_archives (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ capture_id TEXT REFERENCES source_captures(id) ON DELETE SET NULL,
+ original_url TEXT NOT NULL,asset_kind TEXT NOT NULL,
+ original_sha256 TEXT NOT NULL,byte_count INTEGER NOT NULL,
+ content_b64 TEXT NOT NULL,extracted_text_sha256 TEXT NOT NULL DEFAULT '',
+ stored_at TEXT NOT NULL,expires_at TEXT NOT NULL,
+ uploaded_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS source_document_archives_case
+ ON source_document_archives(case_id,evidence_id,stored_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
