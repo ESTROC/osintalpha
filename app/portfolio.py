@@ -64,6 +64,24 @@ def safe_github_avatar(value: object) -> str:
     return ''
 
 
+def source_account_type(provider,url,raw):
+    """Do not treat a publication/repository or indexed mention as a person's profile."""
+    try:
+        parsed=urlsplit(str(url or ''))
+        host=(parsed.hostname or '').casefold()
+        parts=[p for p in parsed.path.split('/') if p]
+    except (ValueError,TypeError):
+        return 'document_or_mention'
+    if provider=='github' and host in ('github.com','www.github.com'):
+        return 'public_account_candidate' if len(parts)==1 else 'document_or_mention'
+    if provider=='stackoverflow' and host in ('stackoverflow.com','www.stackoverflow.com'):
+        return 'public_account_candidate' if len(parts)>=2 and parts[0]=='users' and parts[1].isdigit() else 'document_or_mention'
+    if provider=='openalex' and host in ('openalex.org','www.openalex.org'):
+        return 'indexed_author_candidate' if (len(parts)>=1 and parts[0].casefold().startswith('a')) else 'document_or_mention'
+    # Search results may point at a public account URL but are still just
+    # index descriptions until the original publisher record is inspected.
+    return 'document_or_mention'
+
 @router.get('/api/cases/{case_id}/public-portfolio')
 def public_portfolio(case_id: str, actor=Depends(core.actor_from_cookie)):
     with db.connect() as conn:
@@ -93,10 +111,18 @@ def public_portfolio(case_id: str, actor=Depends(core.actor_from_cookie)):
         parsed = attributes(row)
         photo = safe_github_avatar(raw.get('avatar_url')) if row['provider'] == 'github' else ''
         website = str(raw.get('blog') or '')[:250] if row['provider'] == 'github' else ''
+        category=source_account_type(row['provider'],row['source_url'],raw)
+        if row['provider']=='brave_web' and source_kind!='other_public_page':
+            category='indexed_account_link_not_verified_profile'
         candidate = {
             'evidenceId': row['id'], 'platform': ('public_web_lead' if source_kind == 'other_public_page' else source_kind)
                         if row['provider'] == 'brave_web' else row['provider'],
-            'isProfileAccount': row['provider'] != 'brave_web' or source_kind != 'other_public_page',
+            'sourceRecordCategory': category,
+            'isProfileAccount':category in ('public_account_candidate','indexed_author_candidate'),
+            'accountOwnershipVerified':False,
+            'photoAttribution':'source_account_only_not_subject_identification',
+            'photoLicense':'unverified',
+            'faceIdentityVerified':False,
             'sourceProvider': row['provider'], 'sourceUrl': row['source_url'],
             'displayName': parsed['name'] or row['label'],
             'organization': parsed['organization'], 'publishedLocation': parsed['location'],
@@ -113,9 +139,12 @@ def public_portfolio(case_id: str, actor=Depends(core.actor_from_cookie)):
     candidates.sort(key=lambda item: (
         -len(item['clues']['matched']), len(item['clues']['different']),
         0 if item['sourceProvider'] != 'brave_web' else 1, item['displayName'].casefold()))
+    profile_items=[x for x in candidates if x['isProfileAccount']]
+    documents=[x for x in candidates if not x['isProfileAccount']]
     return {
         'subjectType': case['subject_type'], 'subjectQuery': case['query'],
         'contextCity': context.get('city') or '', 'items': candidates[:200],
+        'accountCandidates':profile_items[:100], 'documentsAndMentions':documents[:100],
         'total': len(candidates), 'verifiedProfiles': 0,
         'notice': ('Independent profiles are not automatically joined. A displayed photo belongs '
                    'to a candidate public account, not necessarily the investigated person. '
