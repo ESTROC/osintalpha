@@ -211,3 +211,22 @@ body{overflow-x:clip}
 .camera-still img{display:block;width:100%;max-height:330px;object-fit:contain;background:#080d16;border-radius:5px}
 .camera-still figcaption{font-size:11px;line-height:1.5;color:#a2b1cb;padding-top:7px}
 .agency-tools-shortcut{font-size:12px}
+
+/* P1-082/083/085/086: task-first dossier and accessible claim detail. */
+.sidebar-tools{margin:8px 10px;border:1px solid #33435b;border-radius:10px;padding:8px}
+.sidebar-tools summary{cursor:pointer;font-size:.83rem;color:#c4d0e0;padding:7px}
+.dossier-primary{border:1px solid #465d82;box-shadow:0 8px 30px rgba(0,0,0,.12);margin:0 0 20px}
+.dossier-primary h2{font-size:1.15rem;margin:4px 0}
+.dossier-answer{font-size:.97rem;line-height:1.55;max-width:78ch}
+.dossier-answer p{margin:.55rem 0}
+.dossier-claim{padding:16px;border-bottom:1px solid #34445d}
+.dossier-claim p{margin:8px 0}
+.dossier-filters{gap:10px;align-items:end}
+.dossier-filters label{min-width:155px;display:flex;flex:1;gap:6px;flex-direction:column;font-size:.82rem}
+.dossier-source{align-items:flex-start}
+.dossier-thumb{width:92px;height:72px;object-fit:contain;float:left;margin:0 12px 8px 0;border-radius:8px;border:1px solid #3c4f69}
+.answer-provenance{padding:9px;margin:8px 0;border:1px solid #42546d;border-radius:9px}
+.answer-provenance summary{cursor:pointer}
+.dossier-inspection{margin:15px 0}
+.dossier-inspection blockquote{margin:12px 0;padding:12px;border-left:3px solid #8ba9d5;white-space:pre-wrap}
+@media(max-width:700px){.dossier-grid{display:block}.dossier-filters{flex-direction:column;align-items:stretch}}
