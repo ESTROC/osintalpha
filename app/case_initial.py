@@ -34,5 +34,6 @@ def initial_view(case_id:str,depth:Literal['quick','standard','thorough']='stand
        'draft':reviewed_report.preview_reviewed_draft(case_id,actor=actor),
        'refinements':candidate_refinement.list_refinements(case_id,actor=actor),
        'sourceTruthVerified':False,
+       'outcomeGuidance':__import__('app.outcome_guidance',fromlist=['outcome_guidance']).outcome_guidance(case_id,actor=actor),
        'initialRoundTripCount':1,
        'notice':'Aggregated response is scoped to authorized case. Other specialist modules remain available by lazy tab activation.'}
