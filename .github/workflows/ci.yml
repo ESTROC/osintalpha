@@ -61,7 +61,7 @@ jobs:
         env:
           OSINTALPHA_BROWSER_BASE: http://127.0.0.1:8765
           OSINTALPHA_ADMIN_PASSWORD: SyntheticBrowserCasePassword2026
-        run: pytest -q tests/test_browser_acceptance.py
+        run: pytest -q tests/test_browser_acceptance.py tests/test_browser_accessibility.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
