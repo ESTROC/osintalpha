@@ -32,7 +32,7 @@ def test_chromium_auth_case_report_keyboard_and_mobile():
         assert api.status==201,api.text()
         case_id=api.json()['id']
         page.reload(wait_until='domcontentloaded')
-        page.locator('button[data-open="'+case_id+'"]').click()
+        page.locator('button[data-open="'+case_id+'"]').first.click()
         page.get_by_text('CASE ANSWER · PROVENANCE FIRST').wait_for(timeout=15000)
         assert page.get_by_text('Sortable, filterable public-source leads').count()>=1
         page.screenshot(path=str(out/'case-desktop.png'),full_page=True)
