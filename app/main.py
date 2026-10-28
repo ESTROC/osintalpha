@@ -1396,6 +1396,10 @@ app.include_router(translation_capture_router)
 from .preservation import router as preservation_router
 app.include_router(preservation_router)
 
+# Case-scoped sensitive record inventory without returning any stored third-party text.
+from .data_protection import router as data_protection_router
+app.include_router(data_protection_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
