@@ -35,7 +35,7 @@ def test_bound_source_claim_can_generate_pending_report(client,auth,case):
         'claim_id':claim.json()['id'],'excerpt_id':excerpt.json()['id']})
     assert proof.status_code==201,proof.text
     review=client.patch(f'/api/evidence/{eid}',headers=auth,json={
-        'status':'corroborated','notes':'Analyst checked the stored synthetic capture, not official fact confirmation.'})
+        'status':'corroborated','reviewer_notes':'Analyst checked the stored synthetic capture, not official fact confirmation.'})
     assert review.status_code==200,review.text
     prev=client.get(f'/api/cases/{case}/reviewed-report-draft').json()
     assert prev['sourceCount']==1
