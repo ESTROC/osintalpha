@@ -2,6 +2,7 @@
 import os
 import json
 from app import db
+from app.release import VERSION
 
 def test_v3_database_tables(client,auth):
     with db.connect() as c:
@@ -9,7 +10,7 @@ def test_v3_database_tables(client,auth):
                       'research_sessions','research_messages','search_history','claim_links']:
             assert c.execute("SELECT count(*) n FROM "+table).fetchone()['n']>=0
     r=client.get('/api/health')
-    assert r.json()['version']=='8.0.0'
+    assert r.json()['version']==VERSION
 
 def test_case_context_and_candidate_triage(client,auth,case):
     assert client.put('/api/cases/'+case+'/context',headers=auth,json={
