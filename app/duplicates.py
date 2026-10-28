@@ -58,6 +58,16 @@ def detect(records,limit=60):
         if m['doi']:by_doi[m['doi']].append(r)
         if m['url']:by_url[m['url']].append(r)
     pairs={}
+    # Publisher syndication signals are source metadata, not proof of a
+    # common owner. They are displayed for review, never treated as independent corroboration.
+    syndicated=defaultdict(list)
+    for record in records:
+        try: raw=json.loads(record.get('raw_json') or '{}')
+        except (TypeError,ValueError):raw={}
+        if not isinstance(raw,dict):raw={}
+        origin=raw.get('original_source_url') or raw.get('syndicated_from') or raw.get('canonical_article_url')
+        canonical=canonical_url(origin)
+        if canonical:syndicated[canonical].append(record)
     def add(a,b,reason,rule):
         if a['id']==b['id']:return
         ordered=sorted((a,b),key=lambda x:x['id'])
@@ -66,7 +76,9 @@ def detect(records,limit=60):
             pairs[key]={'leftId':key[0],'rightId':key[1],
                        'leftLabel':ordered[0]['label'],'rightLabel':ordered[1]['label'],
                        'providers':[ordered[0]['provider'],ordered[1]['provider']],
-                       'rule':rule,'reason':reason,'notIndependent':rule in ('same_doi','same_url'),
+                       'rule':rule,'reason':reason,
+                       'notIndependent':rule in ('same_doi','same_url','declared_syndication'),
+                       'syndicationVerified':False,
                        'identityVerified':False}
     for group in by_doi.values():
         for i,a in enumerate(group):
@@ -74,6 +86,10 @@ def detect(records,limit=60):
     for group in by_url.values():
         for i,a in enumerate(group):
             for b in group[i+1:]:add(a,b,'Canonical public URL matches; may be one underlying source.','same_url')
+    for group in syndicated.values():
+        for i,a in enumerate(group):
+            for b in group[i+1:]:
+                add(a,b,'Publisher metadata names the same upstream article; review original source chain before treating as independent.','declared_syndication')
     # Similar titles do not establish identical people, publications or claims.
     candidates=[r for r in records if len(meta[r['id']]['titleTokens'])>=6]
     for i,a in enumerate(candidates):
@@ -84,7 +100,7 @@ def detect(records,limit=60):
             ratio=len(ta&tb)/max(1,len(ta|tb))
             if ratio>=0.85 and len(ta&tb)>=6:
                 add(a,b,'Highly similar public titles; inspect sources before deciding equivalence.','similar_title')
-    order={'same_doi':0,'same_url':1,'similar_title':2}
+    order={'same_doi':0,'same_url':1,'declared_syndication':2,'similar_title':3}
     result=sorted(pairs.values(),key=lambda x:(order[x['rule']],x['leftId'],x['rightId']))
     return {'pairs':result[:limit],'totalPairs':len(result),
             'counts':{rule:sum(v['rule']==rule for v in result) for rule in order},

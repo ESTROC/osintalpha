@@ -413,6 +413,17 @@ CREATE TABLE IF NOT EXISTS source_link_checks (
  checked_at TEXT NOT NULL,checked_by TEXT NOT NULL REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS source_link_checks_case ON source_link_checks(case_id,evidence_id,checked_at);
+CREATE TABLE IF NOT EXISTS time_qualified_affiliations (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ candidate_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ excerpt_id TEXT NOT NULL REFERENCES verified_excerpts(id) ON DELETE CASCADE,
+ organization_name TEXT NOT NULL,role_title TEXT NOT NULL,
+ start_date TEXT NOT NULL,end_date TEXT NOT NULL DEFAULT '',
+ date_precision TEXT NOT NULL,rationale TEXT NOT NULL,
+ created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS affiliations_case ON time_qualified_affiliations(case_id,candidate_id,created_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
