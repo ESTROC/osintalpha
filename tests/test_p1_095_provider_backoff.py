@@ -1,5 +1,5 @@
 """P1-095 bounded idempotent retries and no auth-rejection retries."""
-import httpx,pytest
+import asyncio,httpx,pytest
 
 from app.connectors import get_json,AdapterError
 
@@ -12,12 +12,11 @@ class Mocked:
         res=httpx.Response(status,request=req,headers={'Retry-After':'0'})
         return res
 
-@pytest.mark.asyncio
-async def test_retry_one_rate_limit_then_succeed(monkeypatch):
+def test_retry_one_rate_limit_then_succeed(monkeypatch):
     monkeypatch.setattr('asyncio.sleep',lambda seconds: _noop())
     client=Mocked([429,200])
     with pytest.raises(AdapterError,match='invalid JSON'):
-        await get_json(client,'https://api.github.com/example')
+        asyncio.run(get_json(client,'https://api.github.com/example'))
     assert client.calls==2
 
 async def _noop():return None
@@ -25,5 +24,5 @@ async def _noop():return None
 @pytest.mark.anyio
 async def test_no_retry_403(monkeypatch):
     client=Mocked([403,200])
-    with pytest.raises(AdapterError):await get_json(client,'https://api.github.com/example')
+    with pytest.raises(AdapterError):asyncio.run(get_json(client,'https://api.github.com/example'))
     assert client.calls==1
