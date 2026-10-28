@@ -462,6 +462,12 @@ CREATE TABLE IF NOT EXISTS provider_health_events (
  status_code INTEGER,latency_ms INTEGER NOT NULL,observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS provider_health_index ON provider_health_events(provider,observed_at);
+CREATE TABLE IF NOT EXISTS provider_terms_reviews (
+ provider TEXT PRIMARY KEY,rights_status TEXT NOT NULL,
+ permitted_uses TEXT NOT NULL,terms_url TEXT NOT NULL,
+ review_notes TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),
+ reviewed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

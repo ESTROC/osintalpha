@@ -1377,6 +1377,10 @@ app.include_router(account_security_router)
 from .advanced_queries import router as advanced_queries_router
 app.include_router(advanced_queries_router)
 
+# Reviewable provider rights and jurisdiction-coverage inventory.
+from .provider_governance import router as provider_governance_router
+app.include_router(provider_governance_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
