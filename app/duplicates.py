@@ -76,7 +76,9 @@ def detect(records,limit=60):
             pairs[key]={'leftId':key[0],'rightId':key[1],
                        'leftLabel':ordered[0]['label'],'rightLabel':ordered[1]['label'],
                        'providers':[ordered[0]['provider'],ordered[1]['provider']],
-                       'rule':rule,'reason':reason,'notIndependent':rule in ('same_doi','same_url'),
+                       'rule':rule,'reason':reason,
+                       'notIndependent':rule in ('same_doi','same_url','declared_syndication'),
+                       'syndicationVerified':False,
                        'identityVerified':False}
     for group in by_doi.values():
         for i,a in enumerate(group):
