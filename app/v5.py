@@ -203,6 +203,11 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
             # publisher hosts. This does not mean the search is exhaustive.
             for page in range(body.pages):
                 try:
+                    from .provider_ops import guard as provider_guard, reserve as reserve_paid_call, record as record_health
+                    import time
+                    provider_guard('brave_web')
+                    reserve_paid_call(case_id,actor['id'],'brave_web')
+                    started_request=time.monotonic()
                     response=await client.get('https://api.search.brave.com/res/v1/web/search',
                         params={'q':query,'count':12,'offset':page,'safesearch':'strict',
                                 'text_decorations':'false','result_filter':'web',
@@ -210,6 +215,7 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                                 **({'freshness':page_window['freshness']} if page_window['freshness']!='all' else {})},
                         headers={'X-Subscription-Token':key,'Accept':'application/json'})
                     response.raise_for_status()
+                    record_health('brave_web','ok',int((time.monotonic()-started_request)*1000),response.status_code)
                     payload=response.json()
                     from .date_context import date_provenance
                     retrieved=core.iso_now()
@@ -229,6 +235,11 @@ async def web_discovery(case_id:str,body:WebSearchInput,actor=Depends(core.prote
                         not payload.get('query',{}).get('more_results_available',False)):
                         break
                 except (httpx.HTTPError,ValueError,TypeError,KeyError,AttributeError) as exc:
+                    if isinstance(exc,httpx.HTTPStatusError):
+                        code=exc.response.status_code
+                        record_health('brave_web','throttled' if code==429 else 'unavailable' if code>=500 else 'error',int((time.monotonic()-started_request)*1000),code)
+                    elif isinstance(exc,httpx.HTTPError):
+                        record_health('brave_web','unavailable',int((time.monotonic()-started_request)*1000))
                     state='error'
                     message='Web source unavailable or provider request failed: '+type(exc).__name__
                     break

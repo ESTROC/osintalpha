@@ -80,7 +80,7 @@ def parse_context(payload: dict[str, Any], *, max_sources: int = 7) -> list[dict
 
 
 async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
-                   *, client=None, freshness='all', country='US', search_lang='en') -> dict[str, Any]:
+                   *, client=None, freshness='all', country='US', search_lang='en', actor_id=None) -> dict[str, Any]:
     key = os.getenv('BRAVE_SEARCH_API_KEY', '').strip()
     if not key:
         raise HTTPException(409, 'BRAVE_SEARCH_API_KEY is not configured on Render.')
@@ -98,6 +98,12 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
     own_client = client is None
     if own_client:
         client = httpx.AsyncClient(timeout=14, follow_redirects=False, trust_env=False)
+    from .provider_ops import guard as provider_guard, reserve as reserve_paid_call, record as record_health
+    import time
+    if actor_id is not None:
+        provider_guard('brave_context')
+        reserve_paid_call(case['id'],actor_id,'brave_context')
+    started_remote=time.monotonic()
     try:
         response = await client.post(
             'https://api.search.brave.com/res/v1/llm/context',
@@ -111,14 +117,18 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
                 **({'freshness':freshness} if freshness!='all' else {}),
             })
         response.raise_for_status()
+        record_health('brave_context','ok',int((time.monotonic()-started_remote)*1000),response.status_code)
         payload = response.json()
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code
+        record_health('brave_context','throttled' if code==429 else 'unavailable' if code>=500 else 'error',int((time.monotonic()-started_remote)*1000),code)
         label = ('Invalid Brave key or insufficient permissions' if code in (401,403)
                  else 'Brave quota or rate limit reached' if code == 429
                  else 'Brave service returned HTTP ' + str(code))
         raise HTTPException(502, label) from exc
     except (httpx.HTTPError, ValueError, TypeError) as exc:
+        if isinstance(exc,httpx.HTTPError):
+            record_health('brave_context','unavailable',int((time.monotonic()-started_remote)*1000))
         raise HTTPException(502, 'Brave live context unavailable: ' + type(exc).__name__) from exc
     finally:
         if own_client:
