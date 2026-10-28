@@ -21,7 +21,8 @@ def test_local_answer_snapshot_captures_query_status_and_reloads(client,auth,cas
     assert convo.status_code==200,convo.text
     provenance=convo.json()['messages'][-1]['provenance']
     assert provenance['integrityOk'] is True
-    assert provenance['snapshotVersion']==2
+    assert provenance['snapshotVersion']==1
+    assert provenance['retrievalTraceVersion']==2
     assert provenance['searchTrace']['providerFailures'][0]['provider']=='brave_web'
     assert provenance['searchTrace']['retrievalComplete'] is False
     with db.connect() as c:

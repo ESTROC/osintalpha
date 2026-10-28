@@ -44,6 +44,7 @@ def snapshot_metadata(conn,case_id,message_id):
     except (ValueError,TypeError):return {'available':False,'integrityOk':False}
     return {'available':True,'snapshotVersion':p.get('snapshotVersion',0),
         'integrityOk':True,'snapshotSha256':row['content_sha256'],
+        'retrievalTraceVersion':p.get('retrievalTraceVersion',0),
         'question':p.get('question'),'answer':p.get('answer'),
         'evidence':p.get('evidence',[]),'webLeads':p.get('webLeads',[]),
         'searchTrace':p.get('searchTrace'),
@@ -69,7 +70,7 @@ def make_snapshot(conn,case_id,message_id,session_id,question,response,provider,
     context=response.get('answerProvenance') if isinstance(response.get('answerProvenance'),dict) else {}
     gates={key:response.get(key) for key in ('evidenceGateAction','highRiskReview',
         'needsDisambiguation','sourceContentScreening','answerQuality') if key in response}
-    payload={'snapshotVersion':2,'question':str(question)[:2000],
+    payload={'snapshotVersion':1,'retrievalTraceVersion':2,'question':str(question)[:2000],
              'answer':str(response.get('answer') or '')[:7500],
              'provider':str(provider),'evidence':bound,'webLeads':leads,
              'searchTrace':trace,'retrievalContext':{
