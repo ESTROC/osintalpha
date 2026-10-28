@@ -520,6 +520,15 @@ CREATE TABLE IF NOT EXISTS public_org_place_points (
  annotation TEXT NOT NULL,recorded_by TEXT NOT NULL REFERENCES users(id),recorded_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS public_org_place_case ON public_org_place_points(case_id,recorded_at);
+CREATE TABLE IF NOT EXISTS licensed_satellite_observations (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL,source_url TEXT NOT NULL,rights_url TEXT NOT NULL,
+ acquisition_date TEXT NOT NULL,ground_resolution_m REAL NOT NULL,
+ crs TEXT NOT NULL,bounds_json TEXT NOT NULL,review_note TEXT NOT NULL,
+ review_actor TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS satellite_case_idx ON licensed_satellite_observations(case_id,reviewed_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,

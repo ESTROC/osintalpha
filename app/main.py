@@ -504,7 +504,8 @@ async def events(feed:Literal['earthquakes','nasa']='earthquakes',actor=Depends(
 @app.get('/api/geo/cameras')
 async def cameras(provider:Literal['tfl','caltrans']='caltrans',actor=Depends(actor_from_cookie)):
     try:
-        items=await (caltrans_cameras() if provider=='caltrans' else tfl_cameras())
+        from .media_governance import camera_publisher_status
+        items=camera_publisher_status(await (caltrans_cameras() if provider=='caltrans' else tfl_cameras()),provider)
         return {'source':'Caltrans official CCTV metadata' if provider=='caltrans' else 'TfL official JamCams','status':'ok' if items else 'empty','retrievedAt':iso_now(),
                 'items':items,'note':'Publisher-listed cameras; feed health and image capture time not guaranteed.'}
     except Exception as e:
@@ -1409,6 +1410,10 @@ app.include_router(analyst_views_router)
 # Source-quoted chronology, organization-only relationship dates and reviewed public place points.
 from .public_event_graph import router as public_event_graph_router
 app.include_router(public_event_graph_router)
+
+# Camera publisher freshness caveats and licensed satellite metadata references.
+from .media_governance import router as media_governance_router
+app.include_router(media_governance_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
