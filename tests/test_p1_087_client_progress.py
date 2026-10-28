@@ -11,6 +11,7 @@ def test_client_stage_outcome_saved_for_case(client,auth,case):
     assert saved.json()['providerConfirmed'] is False
     d=client.get(f'/api/cases/{case}/dossier').json()
     assert d['identityVerified'] is False
+    assert d['providerFailures'][0]['status']=='fallback'
 
 def test_cannot_write_stage_data_to_noncase(client,auth):
     req={'stage':'groq_analysis','outcome':'error',

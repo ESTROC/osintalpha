@@ -20,7 +20,7 @@ def snapshot_search_trace(conn,case_id):
     failure=[{'provider':x['provider'],'query':x['query_text'][:180],
               'status':x['status'],'time':x['created_at'],
               'message':x['message'][:240]} for x in rows
-             if x['status'] in ('error','blocked','unavailable','failed')]
+             if x['status'] in ('error','blocked','unavailable','failed','fallback','skipped')]
     return {'originalQuestion':plan['original_question'] if plan else None,
         'planUpdatedAt':plan['updated_at'] if plan else None,
         'selectedStructuredProviders':p.get('providers',[]),

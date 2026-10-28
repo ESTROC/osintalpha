@@ -90,7 +90,7 @@ def build_dossier(conn,case,*,status='all',sort='relevance',source_class='all',l
     provenance=last if last and last.get('snapshotIntegrityOk') is True else None
     provider_failures=[{'provider':r['provider'],'query':r['query_text'][:160],
         'status':r['status'],'message':r['message'][:220],'at':r['created_at']}
-        for r in queries if r['status'] in ('error','unavailable','blocked','failed')]
+        for r in queries if r['status'] in ('error','unavailable','blocked','failed','fallback','skipped')]
     missing=[]
     if not provenance:missing.append('No intact saved answer-time provenance snapshot')
     if not records:missing.append('No public-source records have been saved')
