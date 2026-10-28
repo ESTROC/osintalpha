@@ -34,7 +34,7 @@ def snapshot(conn,case_id):
         support['claimsMissingCurrentExactQuotes']==0)
     reviewed_source={x['id'] for x in rows}
     acceptable=acceptable and all(x['evidenceId'] in reviewed_source for x in support['items'])
-    assessed_by=ass['reviewed_by'] if ass else None
+    assessed_by=ass['updated_by'] if ass else None
     source_claims=[{'id':x['claimId'],'text':x['claim'],'stance':x['stance'],
       'sourceId':x['evidenceId'],'sourceUrl':x['originalSourceUrl'],
       'captureHashes':[p['captureHash'] for p in x['quoteEvidence'] if p['validCurrentTextBinding']]}
