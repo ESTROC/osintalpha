@@ -38,3 +38,20 @@ def test_provider_diagnostics_no_sensitive_terms(client,auth):
     output=client.get("/api/research/provider-issues")
     assert output.status_code==200,output.text
     assert all(x["credentialValueIncluded"] is False for x in output.json()["items"])
+
+
+def test_provider_rights_update_invalidates_cached_read(client,auth,case):
+    import pytest
+    from app import db
+    from app.connectors import AdapterError
+    async def runner(provider,query,subject,remote):
+        return [Evidence("Public organization record","Synthetic candidate only",
+             "https://example.org/public","entity-1",{"id":7},None)]
+    asyncio.run(cached_collection(case,"gleif","Test Example","organization",runner=runner))
+    with db.connect() as conn:
+        owner=conn.execute("SELECT created_by FROM cases WHERE id=?",(case,)).fetchone()["created_by"]
+        conn.execute("INSERT INTO provider_terms_reviews VALUES (?,?,?,?,?,?,?)",
+          ("gleif","restricted","","https://example.org/terms",
+           "Synthetic temporary restricted licensing for test",owner,"2026-10-29T00:00:00Z"))
+    with pytest.raises(AdapterError,match="restricted"):
+        asyncio.run(cached_collection(case,"gleif","Test Example","organization",runner=runner))

@@ -49,6 +49,16 @@ def cache_key(case_id,provider,query,subject,locale="default"):
 async def cached_collection(case_id,provider,query,subject,*,runner,client=None,locale="default",force_refresh=False):
     if provider not in ALLOWED:
         return await runner(provider,query,subject,client)
+    # Rights updates must override previously saved cache hits immediately.
+    with db.connect() as policy_db:
+        reviewed=policy_db.execute(
+           "SELECT rights_status,permitted_uses FROM provider_terms_reviews WHERE provider=?",
+           (provider,)).fetchone()
+    if reviewed and (reviewed["rights_status"]=="restricted" or
+        (reviewed["rights_status"]=="approved_limited" and
+         "live_queries" not in reviewed["permitted_uses"].split(","))):
+        from .connectors import AdapterError
+        raise AdapterError("Publisher use currently restricted; cached results cannot bypass source policy.")
     key=cache_key(case_id,provider,query,subject,locale)
     now=int(time.time())
     if not force_refresh:
