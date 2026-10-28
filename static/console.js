@@ -101,6 +101,41 @@ function caseTasks(){
  return '<div class="analyst-intro"><div><div class="eyebrow">INVESTIGATION / HUMAN TASK TRACKING</div><h2>Research assignments and review</h2><p>Capture who will verify which public claims, by when, and document why a task was completed or blocked. Completing a task does not automatically verify a person.</p></div></div><div class="grid2">'+form+'<section class="panel"><div class="panel-head"><div class="panel-title">Task queue ('+Number(s.taskTotal||0)+')</div></div>'+cards+'</section></div>';
 }
 
+function caseDossier(){
+ const d=s.dossier||{}, a=d.answer||{}, claims=d.claims||[], sources=d.sourceResults||[], names=d.candidates||[];
+ const answer=a.integrityOk&&a.text?'<div class="dossier-answer">'+rich(a.text)+'</div>':'<div class="empty">No intact saved source-attributed answer. Review the original records before forming a conclusion.</div>';
+ const refs=(a.evidence||[]).slice(0,8).map(x=>'<button type="button" class="btn small" data-go-evidence="'+h(x.id)+'">'+h(x.label||'Saved source')+'</button>').join('')+
+  (a.webLeads||[]).slice(0,6).map(x=>link(x.url,x.title||'Web index lead')).join(' ');
+ const failures=(d.providerFailures||[]).slice(0,8).map(x=>'<div class="callout warn"><strong>'+h(x.provider)+' · '+h(x.status)+'</strong><p>'+h(x.message||'Provider failed')+'</p><small>'+h(x.query)+'</small></div>').join('');
+ const main='<section class="panel dossier-primary"><div class="panel-head"><div><div class="eyebrow">CASE ANSWER · PROVENANCE FIRST</div><h2>Research answer and cited originals</h2></div><span class="tag warn">'+(a.integrityOk?'Saved citation snapshot':'Not source-certified')+'</span></div><div class="panel-pad">'+answer+'<div class="badge-row">'+refs+'</div><p class="help">A saved answer is not a verified biography, identity or independently authenticated fact.</p>'+
+  (failures?'<details open><summary>Recorded provider failures ('+d.providerFailures.length+')</summary>'+failures+'</details>':'<p class="help">No provider failure in the recorded window; unsearched sources remain unknown.</p>')+'</div></section>';
+ const people='<section class="panel"><div class="panel-head"><strong class="panel-title">Separate identity candidates</strong><button class="btn small" data-tab="candidates">Compare</button></div>'+
+  (names.length?names.slice(0,6).map(x=>'<div class="item-row"><div class="row-main"><strong>'+h(x.display_name)+'</strong><p class="item-sub">'+h(x.classification||'unresolved')+' · '+h(x.reason||'No review reason recorded')+'</p></div></div>').join(''):'<div class="empty">No distinct candidate hypotheses saved. Do not infer that the subject lacks a public presence.</div>')+'</section>';
+ const claimRows=claims.slice(0,12).map(x=>'<div class="dossier-claim"><strong>'+h(x.claim)+'</strong><p class="meta">'+h(x.stance)+' · '+h(x.claimBindingState.replaceAll('_',' '))+'</p><div class="inline-actions"><button class="btn small" data-explain-claim="'+h(x.claimId)+'">Inspect quotation</button><button class="btn small subtle" data-go-evidence="'+h(x.evidenceId)+'">Source record</button>'+link(x.originalSourceUrl,'Original URL')+'</div></div>').join('');
+ const claimPanel='<section class="panel"><div class="panel-head"><strong class="panel-title">Claim-by-claim cited evidence</strong><span class="tag">'+claims.length+' recorded</span></div>'+
+   (claimRows||'<div class="empty">No manual source claims yet. Record statements and capture verbatim passages before signoff.</div>')+'</section>';
+ const selected=s.claimDetail;
+ const detail=selected?'<section class="panel panel-pad dossier-inspection"><h3>Quotation and capture integrity</h3><p>'+h(selected.claim)+'</p><p class="help">'+h(selected.claimBindingState)+' · Captured text presence is not verified truth.</p>'+
+    (selected.quoteEvidence||[]).slice(0,6).map(x=>'<blockquote>'+h(x.quoteText)+'</blockquote><p class="meta">SHA '+h(x.captureHash)+' · Current: '+h(x.currentSourceVersion)+' · Bound: '+h(x.validCurrentTextBinding)+'</p>').join('')+
+    link(selected.originalSourceUrl,'Open original page')+'</section>':'';
+ const missing='<section class="panel"><div class="panel-head"><strong class="panel-title">Contradictions and missing information</strong><span class="tag warn">Independent review needed</span></div><div class="panel-pad">'+
+    (d.missingInformation||[]).map(t=>'<div class="plan-step">'+h(t)+'</div>').join('')+
+    (d.nextReviewActions||[]).slice(0,5).map(t=>'<p class="help">• '+h(t)+'</p>').join('')+'</div></section>';
+ const select=(id,opts,value)=>'<select id="'+id+'">'+opts.map(x=>'<option value="'+x[0]+'" '+(value===x[0]?'selected':'')+'>'+h(x[1])+'</option>').join('')+'</select>';
+ const filters='<div class="form-row panel-pad dossier-filters"><label>Sort '+select('dossier-sort',[['relevance','Question fit'],['newest','Newest'],['source','Publisher source'],['reviewed','Reviewed first']],s.dossierSort)+'</label>'+
+   '<label>Review '+select('dossier-status',[['all','Any'],['candidate','Unreviewed'],['corroborated','Corroborated by analyst'],['disputed','Disputed'],['rejected','Rejected']],s.dossierStatus)+'</label>'+
+   '<label>Class '+select('dossier-class',[['all','Any'],['account_or_profile_url','Public account leads'],['public_document_or_mention','Documents and mentions']],s.dossierClass)+'</label></div>';
+ const items=sources.map(x=>'<div class="item-row dossier-source"><div class="row-main">'+
+  (x.licensedThumbnail?'<img class="dossier-thumb" src="'+h(url(x.licensedThumbnail.url))+'" loading="lazy" referrerpolicy="no-referrer" alt="Licensed publisher source media; not a verified person photograph">':'')+
+  '<strong>'+h(x.label)+'</strong><p class="item-sub">'+h(x.provider)+' · '+h(x.reviewStatus)+' · '+h(x.sourceClass.replaceAll('_',' '))+' · '+h(when(x.fetchedAt))+'</p><p class="help">'+h(x.summary)+'</p>'+
+  '<p class="meta">Ranking terms: '+h((x.rankingExplanation?.matchedQuestionTerms||[]).join(', ')||'none')+' · No calibrated person match</p>'+
+  (x.licensedThumbnail?'<p class="meta">Source media credit: '+h(x.licensedThumbnail.credit)+' · '+h(x.licensedThumbnail.license)+'</p>':'')+
+  '</div><button class="btn small" data-go-evidence="'+h(x.id)+'">Inspect</button></div>').join('');
+ const sourcePanel='<section class="panel"><div class="panel-head"><strong class="panel-title">Sortable, filterable public-source leads</strong><span class="tag">'+Number(d.totalFilteredSourceResults||0)+' candidates</span></div>'+filters+
+   (items||'<div class="empty">No results for these filters. This does not establish source absence.</div>')+'</section>';
+ return main+'<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+missing+sourcePanel;
+}
+
 function caseOverview(){
  const c=s.case.case,ctx=s.case.context||{},ins=s.intel||{},stats=ins.metrics||{},
        run=s.lastResearch,steps=s.researchPlan?.queries||[],triage=s.triage?.candidates||[];
@@ -145,7 +180,7 @@ function caseOverview(){
  '<button class="btn small primary" data-resume-saved-plan '+(s.busy?'disabled':'')+'>Open resumable source investigation</button></div></section>':'';
   const candidates='<section class="panel"><div class="panel-head"><div class="panel-title">Potentially relevant source leads</div><button class="btn small subtle" data-tab="candidates">Compare identities →</button></div>'+
  (useful.length?useful.map(x=>'<div class="item-row"><div class="row-main"><div class="item-title">'+h(x.label)+'</div><div class="item-sub">'+h(x.provider)+' · matched public clues: '+h(x.signals.join(', ')||'none')+'</div></div><button data-go-evidence="'+h(x.id)+'" class="btn small">Inspect</button></div>').join(''):'<div class="empty">No source records presently match supplied public clues. Do not assume the target has no online presence.</div>')+'</section>';
- return header+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+savedProgressPanel+counterPanel+sideBySide+explain;
+ return header+caseDossier()+context+'<div class="stat-grid">'+cards.map(x=>'<div class="panel stat"><div class="stat-label">'+x[0]+'</div><div class="stat-number">'+x[1]+'</div><div class="stat-tail">'+x[2]+'</div></div>').join('')+'</div>'+readinessPanel+'<div class="grid2">'+plan+candidates+'</div>'+savedProgressPanel+counterPanel+sideBySide+explain;
 }
 
 function caseInvestigate(){
@@ -279,6 +314,12 @@ function caseAssistant(){
  const messages=s.messages.length?s.messages.map((m,idx)=>'<div class="message '+m.role+'"><div class="bubble">'+
   (m.role==='assistant'?rich(m.text):'<p>'+h(m.text)+'</p>')+'</div>'+
   (m.role==='assistant'?'<div class="message-foot">'+h(m.model||'Assistant')+(m.braveContextUsed?' · Brave fresh context':m.webSearch?' · Public web search':'')+(m.retrieval?' · '+m.retrieval.selected+'/'+m.retrieval.totalRecords+' relevant stored records selected':'')+(m.error?' · Request failed':' · Sources require review')+'</div>'+
+   (m.provenance?.integrityOk?'<details class="answer-provenance"><summary>Saved source and provider trace</summary>'+
+    '<p class="help">Snapshot SHA '+h(m.provenance.snapshotSha256||'')+'</p>'+
+    (m.provenance.evidence||[]).map(x=>'<button class="btn small" data-go-evidence="'+h(x.id)+'">'+h(x.label)+'</button>').join('')+
+    (m.provenance.searchTrace?.providerFailures||[]).map(x=>'<div class="callout warn">'+h(x.provider)+' · '+h(x.status)+' · '+h(x.message||'Provider unavailable')+'</div>').join('')+
+    '<p class="help">This trace records past retrieval, not universal coverage or verified identity.</p></details>':
+    m.provenance?.integrityOk===false?'<div class="callout warn">Saved answer provenance integrity mismatch. Do not rely on this message.</div>':'')+
    (m.followUp?'<button class="btn small subtle" data-question="'+h(m.followUp)+'" style="justify-content:flex-start;white-space:normal;text-align:left">'+h(m.followUp)+' →</button>':'')+
    '<div class="citation-row">'+citations(m.ids)+'</div>'+
    (m.webSearch?(m.webLeads?.length?'<div class="source-item" style="margin-top:11px"><strong>Public web leads · analyst review required</strong><p>These URLs are suggested by the model and have not been independently fetched, validated or matched to this person.</p>'+
@@ -622,7 +663,7 @@ async function refreshDossier(){
  render();
 }
 async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.server=auth;const [ca,ov,so,pr,cap]=await Promise.all([api('/api/cases'),api('/api/overview'),api('/api/sources'),api('/api/projects'),api('/api/capabilities')]);s.cases=ca.items||[];s.overview=ov;s.sources=so.items||[];s.projects=pr.items||[];s.capabilities=cap;if(s.user?.role==='admin')s.users=(await api('/api/users')).items;s.where='home';render()}
-document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan]');if(!t)return;try{
+document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan],button[data-explain-claim]');if(!t)return;try{
 if(t.dataset.nav){s.where=t.dataset.nav;render();if(s.where==='world'&&s.geoStatus==='idle')await loadGeo()}
 else if(t.dataset.mode){s.mode=t.dataset.mode;s.where='home';render();document.getElementById('query')?.focus()}
 else if(t.dataset.tab){s.tab=t.dataset.tab;await loadAdvancedCaseState(s.tab);render()}
@@ -633,6 +674,10 @@ else if(t.hasAttribute('data-resume-saved-plan')){
  await loadAdvancedCaseState('investigate');
  render();
  toast(continuation.reusedExisting?'Existing saved research job restored.':'New bounded research continuation saved. Choose Continue to execute provider steps.');
+}
+else if(t.hasAttribute('data-explain-claim')){
+ s.claimDetail=await api('/api/cases/'+s.id+'/claims/'+encodeURIComponent(t.dataset.explainClaim)+'/explain');
+ s.tab='overview';render();
 }
 else if(t.hasAttribute('data-cross-engine')){
  if(!s.sessionId)throw Error('Run a source-grounded conversation before a second-engine check.');
@@ -765,7 +810,12 @@ else if(t.dataset.websave){
 else if(t.hasAttribute('data-consent')){await api('/api/cases/'+s.id+'/ai-consent',{method:'PUT',body:{enabled:true}});await fetchCase();s.provider=s.server.groqConfigured?'groq':s.server.aiConfigured?'grok':'local';render();toast('Remote AI enabled for this case. Select the provider and ask your question.')}
 else if(t.hasAttribute('data-logout')){await api('/api/auth/logout',{method:'POST'});s.user=null;login()}
 }catch(err){toast(err.message,true)}});
-document.addEventListener('change',async e=>{if(e.target.id==='ai-provider'){s.provider=e.target.value;render()}if(e.target.id==='geo-feed'){s.feed=e.target.value;await loadGeo()}
+document.addEventListener('change',async e=>{
+ if(['dossier-sort','dossier-status','dossier-class'].includes(e.target.id)){
+   const field={'dossier-sort':'dossierSort','dossier-status':'dossierStatus','dossier-class':'dossierClass'}[e.target.id];
+   s[field]=e.target.value;await refreshDossier();return;
+ }
+if(e.target.id==='ai-provider'){s.provider=e.target.value;render()}if(e.target.id==='geo-feed'){s.feed=e.target.value;await loadGeo()}
 if(e.target.id==='satellite-toggle'){s.satelliteEnabled=!!e.target.checked;render()}
 if(e.target.id==='satellite-date'){const date=e.target.value;if(!/^20[12][0-9]-[0-9]{2}-[0-9]{2}$/.test(date)||date>new Date().toISOString().slice(0,10))throw Error('Invalid imagery date');s.satelliteDate=date;render()}if(e.target.id==='research-web'){s.webSearch=!!e.target.checked;if(s.webSearch)s.braveContext=false;render()}
 if(e.target.id==='research-brave'){s.braveContext=!!e.target.checked;if(s.braveContext)s.webSearch=false;render()}if(e.target.id==='conversation-select'){if(e.target.value)await loadConversation(e.target.value);else{s.sessionId=null;s.messages=[];render()}}
