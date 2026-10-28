@@ -568,6 +568,17 @@ def build_html_report(case,evidence,runs):
     printed_omissions=max(0,len(reviewed)-80)+max(0,len(pending)-50)
     failures=''.join(f'<li>{esc(r["provider"])}: {esc(r["message"])}</li>' for r in runs if r['state']=='error')
     research_appendix=report_research_appendix(case['id'])
+    from .case_presentation import methodology_data
+    with db.connect() as methodology_conn:
+        methods=methodology_data(methodology_conn,case['id'])
+    method_rows=''.join('<li>'+esc(x['provider'])+' · '+esc(x['status'])+
+        ' · '+esc(x['query_text'][:160])+' · '+esc(x['created_at'])+'</li>'
+        for x in methods['recordedQueries'][:70])
+    methods_section='<h2>Recorded research protocol and failures</h2><p><b>Original question:</b> '+
+        esc(methods['originalQuestion'])+'</p><p>Attempted queries, never guaranteed complete:</p><ul>'+
+        (method_rows or '<li>No saved source-query attempt.</li>')+'</ul>'+
+        '<p>Saved failed or blocked stages: '+str(len(methods['recordedFailures']))+
+        '. No-hit and unavailable-source outcomes are distinct; historical and regional coverage cannot be guaranteed.</p>'
     from .claim_support import index as report_claim_index
     with db.connect() as report_conn:
         support=report_claim_index(report_conn,case['id'])
@@ -586,7 +597,7 @@ def build_html_report(case,evidence,runs):
         ''.join(annotated) if annotated else '<li>No manually linked source claims.</li>')+'</ul>'
     return f'''<!doctype html><html><head><meta charset="utf-8"><title>Investigation Report</title>
     <style>body{{font:13px Arial,sans-serif;color:#14233f;margin:35px}}h1{{font-size:24px}}h2{{font-size:16px;margin-top:30px}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}td,th{{border:1px solid #cbd5e1;padding:8px;overflow-wrap:anywhere;vertical-align:top}}th{{background:#e6edf7}}.warn{{padding:15px;background:#fff2d9}}.muted{{color:#64748b}}a{{color:#1254ad}}@page{{size:A4 landscape;margin:14mm}}</style></head><body>
-    <h1>OSINTALPHA / Investigation report</h1><p class="muted">Case ID: {esc(case['id'])} • Generated {esc(iso_now())}</p>
+    <h1>OSINTALPHA / Investigation report</h1><div class="warn"><b>DRAFT WORKING DOCUMENT — NOT APPROVED FOR DISTRIBUTION.</b> Use the separately reviewed /distribution/approved report endpoint after human sign-off.</div><p class="muted">Case ID: {esc(case['id'])} • Generated {esc(iso_now())}</p>
     <h2>{esc(case['title'])}</h2><p><b>Subject:</b> {esc(case['query'])} ({esc(case['subject_type'])})</p><p><b>Purpose:</b> {esc(case['purpose'])}</p>
     <div class="warn">Candidate matches are not confirmed identities. Reviewed status records an analyst decision and does not constitute authoritative verification. Absence from a source is not proof of absence.</div>
     {claim_section}
@@ -596,6 +607,7 @@ def build_html_report(case,evidence,runs):
     <table><thead><tr><th>Source</th><th>Candidate / record</th><th>Finding and limits</th><th>Review</th><th>Citation</th><th>Fetched UTC</th></tr></thead><tbody>{annex_rows or '<tr><td colspan="6">No raw candidate annex.</td></tr>'}</tbody></table>
     <h2>Source failures / limitations</h2><ul>{failures or '<li>No recorded source errors; completeness is not guaranteed.</li>'}</ul>
     {research_appendix}
+    {methods_section}
     <p class="muted">Method: public API candidate discovery, manual evidence review, no automatic identity merging. Source links may change after collection. For sensitive real-world decisions obtain independent verification.</p></body></html>'''
 
 
@@ -1449,6 +1461,10 @@ app.include_router(case_initial_router)
 # Separate source-bound distribution approval; legacy reports stay draft exports.
 from .report_distribution import router as report_distribution_router
 app.include_router(report_distribution_router)
+
+# Case title editing without query loss and saved, bounded methodology appendix.
+from .case_presentation import router as case_presentation_router
+app.include_router(case_presentation_router)
 
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
