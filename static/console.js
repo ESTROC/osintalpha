@@ -409,7 +409,7 @@ function caseReports(){
 }
 
 function caseActivity(){
- const originPanel=window.OSINTAlphaPanels.originPanel(s.originReview,s.reviewObligations);
+ const originPanel=(window.OSINTAlphaPanels?.originPanel?.(s.originReview,s.reviewObligations)||'');
  const chronological=(s.chronology?.items||[]).slice(0,40).map(x=>
   '<div class="item-row"><div class="row-main"><strong>'+h(x.title)+'</strong><div class="item-sub">'+
    link(x.sourceUrl,'Original source')+'</div><p class="meta">'+
@@ -464,7 +464,7 @@ function requiredPasswordChange(){
  return '<div class="page narrow">'+heading('ACCOUNT SECURITY','Password rotation required','An administrator reset your credentials. Change this temporary secret before accessing any case.')+credentialRotationForm(true)+'</div>';
 }
 function settings(){
- const timing=window.OSINTAlphaPanels.timingPanel(s.timeliness);
+ const timing=(window.OSINTAlphaPanels?.timingPanel?.(s.timeliness)||'');
  const providers=s.providerIssues?.items||[];
  const diagnosis='<section class="panel" style="margin:12px 0"><div class="panel-head"><strong class="panel-title">Source provider diagnostics</strong><button class="btn small" data-provider-issues>Refresh observations</button></div>'+
  '<p class="panel-pad help">Observed requests only: no uptime guarantee, no account keys or source search terms. Retry-after is unknown unless supplied by the upstream.</p>'+

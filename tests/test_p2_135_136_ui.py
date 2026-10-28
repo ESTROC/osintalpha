@@ -5,5 +5,5 @@ def test_safe_panel_is_modular_and_script_precedes_console():
     html=(root/'static/index.html').read_text()
     assert html.index('/assets/console_panels.js')<html.index('/assets/console.js')
     source=(root/'static/console.js').read_text()
-    assert "window.OSINTAlphaPanels.originPanel" in source
-    assert "window.OSINTAlphaPanels.timingPanel" in source
+    assert "window.OSINTAlphaPanels?.originPanel?." in source
+    assert "window.OSINTAlphaPanels?.timingPanel?." in source
