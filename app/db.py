@@ -488,6 +488,14 @@ CREATE TABLE IF NOT EXISTS translation_capture_reviews (
  caveat TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),reviewed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS translation_capture_reviews_case ON translation_capture_reviews(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS case_preservation_policy (
+ case_id TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+ review_after TEXT NOT NULL,
+ legal_hold INTEGER NOT NULL DEFAULT 0,
+ rationale TEXT NOT NULL,
+ reviewed_by TEXT NOT NULL REFERENCES users(id),
+ reviewed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
