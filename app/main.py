@@ -1474,6 +1474,10 @@ app.include_router(export_controls_router)
 from .next_steps import router as next_steps_router
 app.include_router(next_steps_router)
 
+# Authorized case-to-case reviewed source comparison and non-destructive batch preview.
+from .case_review_operations import router as case_review_operations_router
+app.include_router(case_review_operations_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
