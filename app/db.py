@@ -561,6 +561,14 @@ CREATE TABLE IF NOT EXISTS case_investigation_templates (
  template_id TEXT NOT NULL,version INTEGER NOT NULL,
  selected_by TEXT NOT NULL REFERENCES users(id),selected_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS report_release_approvals (
+ id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ reviewer_id TEXT NOT NULL REFERENCES users(id),
+ signoff_id TEXT NOT NULL REFERENCES case_signoffs(id) ON DELETE CASCADE,
+ review_digest TEXT NOT NULL,preview_sha256 TEXT NOT NULL,
+ issued_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS report_release_case ON report_release_approvals(case_id,issued_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
