@@ -1,7 +1,7 @@
 
 /* OSINT Alpha v7.9 unified public research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,budget:null,reviewedDraft:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'Full name or public handle',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'Organization or registered business',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'Public domain name',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'Public IP address',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
@@ -133,7 +133,30 @@ function caseDossier(){
   '</div><button class="btn small" data-go-evidence="'+h(x.id)+'">Inspect</button></div>').join('');
  const sourcePanel='<section class="panel"><div class="panel-head"><strong class="panel-title">Sortable, filterable public-source leads</strong><span class="tag">'+Number(d.totalFilteredSourceResults||0)+' candidates</span></div>'+filters+
    (items||'<div class="empty">No results for these filters. This does not establish source absence.</div>')+'</section>';
- return main+'<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+missing+sourcePanel;
+ const budget=s.budget||{},draft=s.reviewedDraft||{},refinements=s.refinements?.items||[];
+ const budgetPanel='<section class="panel" style="margin:14px 0"><div class="panel-head"><strong class="panel-title">External request allowance · today (UTC)</strong><span class="tag warn">Billed cost unknown</span></div><div class="panel-pad"><div class="badge-row">'+
+ (budget.dailyCallReservations||[]).map(x=>'<span class="tag">'+h(x.provider)+' '+Number(x.used)+' / '+Number(x.cap)+' reserved</span>').join('')+
+ '</div><p class="help">Counts reserve attempts, not vendor invoices or monthly provider quota. Quota failures may prevent a new search.</p></div></section>';
+ const refinePanel=names.length?'<section class="panel" style="margin:16px 0"><div class="panel-head"><strong class="panel-title">Refine one candidate without restarting this case</strong></div>'+
+ '<form id="case-candidate-refine-form" class="panel-pad input-stack"><label>Candidate hypothesis<select name="candidate_id" required>'+
+ names.map(x=>'<option value="'+h(x.id)+'">'+h(x.display_name)+'</option>').join('')+'</select></label>'+
+ '<label>Published context<select name="clue_kind"><option value="public_organization">Organization</option><option value="public_city">Public city</option><option value="published_field">Field</option><option value="public_handle">Handle</option></select></label>'+
+ '<input name="clue_value" minlength="3" maxlength="120" required placeholder="Known published clue, not private contact details">'+
+ '<input name="rationale" minlength="20" maxlength="400" required placeholder="Why this published clue belongs in research">'+
+ '<label class="check"><input type="checkbox" name="consent" required> Authorize recording this public-source research pivot</label>'+
+ '<button class="btn small primary" type="submit">Save candidate refinement</button></form>'+
+ (refinements.slice(0,5).map(x=>'<div class="item-row"><div class="row-main">'+h(x.display_name)+' · '+h(x.clue_kind)+'<p class="meta">'+h(x.search_query)+'</p></div>'+
+ '<button class="btn small" data-use-refinement="'+h(x.search_query)+'">Open as research question</button></div>').join(''))+
+ '<p class="help">A refinement does not query providers, verify identity or merge different people.</p></section>':'';
+ const draftPanel='<section class="panel" style="margin:16px 0"><div class="panel-head"><strong class="panel-title">Reviewed-source report draft</strong><span class="tag warn">Human signoff required</span></div><div class="panel-pad">'+
+ '<p class="help">'+Number(draft.sourceCount||0)+' current corroborated, exact-quote-bound claim(s). These are not independently confirmed facts.</p>'+
+ '<p>'+h(draft.executive_summary||'No reviewed material yet.')+'</p>'+
+ (draft.selectedClaims||[]).slice(0,4).map(x=>'<blockquote>'+h(x.quote)+'</blockquote>'+link(x.sourceUrl,'Original source')).join('')+
+ '<p class="help">'+h(draft.limitations||'Missing source limitations')+'</p>'+
+ (draft.sourceCount?'<button class="btn small primary" data-approve-report-draft="'+h(draft.reviewToken)+'">I reviewed these excerpts · save pending report</button>':
+ '<p class="help">Corroborate and attach exact quotations before a report draft can be saved.</p>')+
+ '</div></section>';
+ return main+budgetPanel+'<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+missing+refinePanel+draftPanel+sourcePanel;
 }
 
 function caseOverview(){
@@ -439,7 +462,7 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
+async function openCase(id){s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.budget=null;s.reviewedDraft=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
  try{const saved=await api('/api/cases/'+id+'/search-plan');if(saved.available){s.smartPlan=saved.plan;s.smartQuestion=saved.question}}catch(e){/* Legacy case; no versioned plan */}s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
  // The initial case view needs only overview, conversation and provider state.
@@ -457,6 +480,12 @@ async function loadResearchState(){
  s.readiness=await api('/api/cases/'+s.id+'/decision-readiness');
  s.searchProgress=await api('/api/cases/'+s.id+'/search-progress');
  s.dossier=await api('/api/cases/'+s.id+'/dossier');
+ const [budget,draft,refinements]=await Promise.all([
+    api('/api/cases/'+s.id+'/research-budget'),
+    api('/api/cases/'+s.id+'/reviewed-report-draft'),
+    api('/api/cases/'+s.id+'/candidate-refinements')
+ ]);
+ s.budget=budget;s.reviewedDraft=draft;s.refinements=refinements;
  s.triage=tr;s.conversations=conv.items||[];s.researchPlan=researchPlan;
  s.researchRuns=runs.items||[];s.intel=intel;s.webProviders=webProviders;s.candidates=candidates.items||[];
  if(s.conversations.length)await loadConversation(s.conversations[0].id);
@@ -669,7 +698,7 @@ async function refreshDossier(){
  render();
 }
 async function init(){const auth=await api('/api/auth/me');s.user=auth.user;s.server=auth;const [ca,ov,so,pr,cap]=await Promise.all([api('/api/cases'),api('/api/overview'),api('/api/sources'),api('/api/projects'),api('/api/capabilities')]);s.cases=ca.items||[];s.overview=ov;s.sources=so.items||[];s.projects=pr.items||[];s.capabilities=cap;if(s.user?.role==='admin')s.users=(await api('/api/users')).items;s.where='home';render()}
-document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan],button[data-explain-claim]');if(!t)return;try{
+document.addEventListener('click',async e=>{const t=e.target.closest('button[data-nav],button[data-mode],button[data-tab],button[data-open],button[data-evidence],button[data-collect],button[data-add],button[data-refresh],button[data-locate],button[data-question],button[data-consent],button[data-webstart],button[data-websave],button[data-newchat],button[data-go-evidence],button[data-task-history],button[data-member-remove],button[data-deletecase],button[data-case-page],button[data-case-reset],button[data-web-discover],button[data-capture-source],button[data-show-captures],button[data-version-history],button[data-compare-runs],button[data-job-select],button[data-job-run],button[data-job-recover],button[data-identity-pair],button[data-draft-assessment],button[data-logout],button[data-profile-map],button[data-profile-search],button[data-home-load-events],button[data-case-city-map],button[data-camera-preview],button[data-cross-engine],button[data-resume-saved-plan],button[data-explain-claim],button[data-approve-report-draft],button[data-use-refinement]');if(!t)return;try{
 if(t.dataset.nav){s.where=t.dataset.nav;render();if(s.where==='world'&&s.geoStatus==='idle')await loadGeo()}
 else if(t.dataset.mode){s.mode=t.dataset.mode;s.where='home';render();document.getElementById('query')?.focus()}
 else if(t.dataset.tab){s.tab=t.dataset.tab;await loadAdvancedCaseState(s.tab);render()}
@@ -680,6 +709,17 @@ else if(t.hasAttribute('data-resume-saved-plan')){
  await loadAdvancedCaseState('investigate');
  render();
  toast(continuation.reusedExisting?'Existing saved research job restored.':'New bounded research continuation saved. Choose Continue to execute provider steps.');
+}
+else if(t.hasAttribute('data-approve-report-draft')){
+ const r=await api('/api/cases/'+s.id+'/reviewed-report-draft/accept',{method:'POST',
+   body:{review_token:t.dataset.approveReportDraft,reviewer_confirmed:true}});
+ s.intel=await api('/api/cases/'+s.id+'/intelligence');
+ s.reviewedDraft=await api('/api/cases/'+s.id+'/reviewed-report-draft');
+ render();toast('Structured report saved as awaiting independent review, not approved.');
+}
+else if(t.hasAttribute('data-use-refinement')){
+ s.tab='assistant';render();const area=document.querySelector('#ask-form textarea');
+ if(area){area.value=t.dataset.useRefinement;area.focus()}
 }
 else if(t.hasAttribute('data-explain-claim')){
  s.claimDetail=await api('/api/cases/'+s.id+'/claims/'+encodeURIComponent(t.dataset.explainClaim)+'/explain');
@@ -834,7 +874,7 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form','case-candidate-refine-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
 if(f.id==='smart-search-form')await smartLaunch(f);
@@ -911,6 +951,13 @@ if(f.dataset?.candidateLink){
  s.candidates=(await api('/api/cases/'+s.id+'/candidates')).items;
  s.intel=await api('/api/cases/'+s.id+'/intelligence');render();
  toast('Source attached to an identity hypothesis.');
+}
+if(f.id==='case-candidate-refine-form'){
+ const data=Object.fromEntries(new FormData(f).entries());
+ data.consent=!!data.consent;
+ await api('/api/cases/'+s.id+'/candidate-refinements',{method:'POST',body:data});
+ s.refinements=await api('/api/cases/'+s.id+'/candidate-refinements');
+ render();toast('Candidate refinement saved; original question remains intact. No search was run.');
 }
 if(f.id==='assessment-form'){
  const d=Object.fromEntries(new FormData(f).entries());
