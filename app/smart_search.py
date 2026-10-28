@@ -35,6 +35,9 @@ class SearchRequest(BaseModel):
     organization: str = Field(default='', max_length=160)
     profession: str = Field(default='', max_length=120)
     public_handle: str = Field(default='', max_length=120)
+    freshness: Literal['all','pd','pw','pm','py']='all'
+    date_from: str | None = Field(default=None,max_length=10)
+    date_to: str | None = Field(default=None,max_length=10)
 
 
 def words(question):
@@ -241,6 +244,23 @@ async def start_search(body: SearchRequest, actor=Depends(core.protect)):
         require_safe_remote_query(question,plan['subjectType'])
         plan=await ai_route(question,plan)
     plan['deferExternalSearch']=bool(plan['needsClarification'])
+    # Only the indexed public-web provider supports an explicit original date range.
+    from datetime import date
+    first,last=body.date_from,body.date_to
+    if bool(first)!=bool(last):
+        raise HTTPException(422,'Specify both historical start and end dates.')
+    if first:
+        try:
+            start_d,end_d=date.fromisoformat(first),date.fromisoformat(last)
+        except ValueError as exc:
+            raise HTTPException(422,'Historical dates must use YYYY-MM-DD.') from exc
+        if start_d>end_d or end_d>datetime.now(timezone.utc).date():
+            raise HTTPException(422,'Historical date range must be ordered and cannot end in the future.')
+    plan['searchTimeScope']={'freshness':body.freshness,'dateFrom':first,'dateTo':last,
+       'historicalRangeRequested':bool(first),
+       'braveIndexedWebDateFilterSupported':True,
+       'structuredProviderDateFilterVerified':False,
+       'caveat':'Public API providers may not expose publication dates. Unknown dates remain unknown.'}
     # Do not falsely reject public event/business questions that a heuristic
     # parser mistakes for names. Keep the advisory clarification state instead;
     # the default UI uses it to stop automatic paid searches for a person.

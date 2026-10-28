@@ -23,6 +23,10 @@ def test_chromium_auth_case_report_keyboard_and_mobile():
         page.locator('#login-form input[name="password"]').fill(os.environ['OSINTALPHA_ADMIN_PASSWORD'])
         page.locator('#login-form button').click()
         page.locator('#smart-query').wait_for(timeout=15000)
+        page.keyboard.press('Control+k')
+        page.get_by_role('dialog',name='Keyboard commands').wait_for(timeout=5000)
+        page.keyboard.press('Escape')
+        assert page.get_by_role('dialog',name='Keyboard commands').count()==0
         assert page.get_by_text('Search public sources').count()>=1
         api=context.request.post(browser_base+'/api/cases',
             headers={'X-OSINT-Alpha-Action':'1'},

@@ -1478,6 +1478,10 @@ app.include_router(next_steps_router)
 from .case_review_operations import router as case_review_operations_router
 app.include_router(case_review_operations_router)
 
+# Public evidence-based pilot service notices and status history.
+from .public_status import router as public_status_router
+app.include_router(public_status_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
