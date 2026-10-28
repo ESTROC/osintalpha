@@ -192,6 +192,38 @@ async def ai_route(question, fallback):
             'caveat':'Source planning is not identity verification.'}
 
 
+def preflight_search_question(question,explicit_type=None):
+    """No remote request, DB insert or identity claim before analyst review."""
+    route=deterministic_route(question,explicit_type)
+    kind=route['subjectType']
+    q=words(question)
+    from .search_policy import question_type
+    task=question_type(q,kind)
+    low_type=(explicit_type is None and kind=='person' and task in {
+      'public_event','business','education','legal_entity','passive_technical','public_security'})
+    ambiguous_subject=(kind=='person' and (
+        bool(route.get('needsClarification')) or
+        len(str(route.get('subject') or '').split())==1))
+    needs=bool(low_type or ambiguous_subject)
+    return {'question':q,'suggestedSubject':route['subject'],
+        'suggestedType':kind,'questionType':task,
+        'typeConfidence':'tentative_low' if low_type else 'explicit' if explicit_type else 'heuristic_not_verified',
+        'requiresHumanReview':needs,
+        'reason':('The topic may not represent an individual; choose the correct research subject type.'
+             if low_type else 'A single name or uncertain identity needs a public distinguishing clue.'
+             if ambiguous_subject else 'This is a routing hypothesis, not entity verification.'),
+        'availableTypes':['person','organization','domain','ip'],
+        'externalRequestsMade':False,'caseCreated':False}
+
+@router.get('/api/search/preflight')
+def preflight(question:str,subject_type:Literal['person','organization','domain','ip']|None=None,
+        actor=Depends(core.actor_from_cookie)):
+    if not 3<=len(question.strip())<=200:
+        raise HTTPException(422,'Enter a 3–200 character public research question.')
+    if BLOCKED_LIVE_TRACKING.search(question):
+        raise HTTPException(422,'Private residential or live person location search is unsupported.')
+    return preflight_search_question(question,subject_type)
+
 @router.post('/api/search/start',status_code=201)
 async def start_search(body: SearchRequest, actor=Depends(core.protect)):
     if not body.authority_confirmed:
