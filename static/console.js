@@ -515,6 +515,12 @@ async function collect(){
  }finally{s.busy=false;render()}
 }
 
+async function saveClientStageError(caseId,stage,question,outcome='error'){
+ try{await api('/api/cases/'+caseId+'/client-stage-events',{method:'POST',
+   body:{stage,outcome,reason:'provider_error',original_question:question.slice(0,200)}});
+ }catch(err){s.smartIssues.push('Source stage diagnostic could not be persisted. Verify provider logs independently.');}
+}
+
 async function smartLaunch(form){
  const d=Object.fromEntries(new FormData(form).entries());
  const question=String(d.question||'').trim();
@@ -585,7 +591,7 @@ async function smartLaunch(form){
       s.smartCoverage.structured=failures.length?'partial':'ok';
       if(failures.length)s.smartIssues.push(failures.length+' structured source(s) unavailable; check original source coverage.');
     }catch(error){
-      s.smartCoverage.structured='error';s.smartIssues.push('Some structured sources could not be collected: '+error.message);
+      s.smartCoverage.structured='error';s.smartIssues.push('Some structured sources could not be collected: '+error.message);await saveClientStageError(started.id,'structured',question);
     }
   }
   if(started.braveConfigured){
@@ -598,7 +604,7 @@ async function smartLaunch(form){
       s.smartCoverage.braveQueries=indexed.executedQueries||0;
       if(indexed.errors)s.smartIssues.push('Brave web discovery reported '+indexed.errors+' provider error(s).');
     }catch(error){
-      s.smartCoverage.braveIndex='error';s.smartIssues.push('Public web discovery unavailable: '+error.message);
+      s.smartCoverage.braveIndex='error';s.smartIssues.push('Public web discovery unavailable: '+error.message);await saveClientStageError(started.id,'brave_index',question);
     }
   }
   await fetchCase();
@@ -632,7 +638,7 @@ async function smartLaunch(form){
           body:{question:webQuestion,provider:'groq',brave_context:s.braveContext,web_search:false,freshness,country,search_lang,save_bounded_excerpts:!!d.save_bounded_excerpts}});
       }catch(err){
         if(!s.braveContext)throw err;
-        s.smartCoverage.braveContext='error';s.smartIssues.push('Fresh Brave-to-Groq context failed: '+err.message+'; AI retried with saved evidence only.');
+        s.smartCoverage.braveContext='error';s.smartIssues.push('Fresh Brave-to-Groq context failed: '+err.message+'; AI retried with saved evidence only.');await saveClientStageError(started.id,'brave_context',question,'fallback');
         response=await api('/api/cases/'+started.id+'/chat',{method:'POST',
           body:{question:webQuestion,provider:'groq',brave_context:false,web_search:false,freshness,country,search_lang}});
       }
@@ -644,7 +650,7 @@ async function smartLaunch(form){
         retrieval:response.retrieval||null});
       s.conversations=(await api('/api/cases/'+started.id+'/conversations')).items||[];
     }catch(err){
-      s.smartCoverage.groq='error';s.smartIssues.push('AI summary unavailable: '+err.message);
+      s.smartCoverage.groq='error';s.smartIssues.push('AI summary unavailable: '+err.message);await saveClientStageError(started.id,'groq_analysis',question);
       s.messages.push({role:'assistant',text:'The AI answer is unavailable. Open the source records below and review each original. A search result alone does not identify a person.',model:'Source-only fallback'});
     }
   }else{

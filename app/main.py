@@ -1299,6 +1299,10 @@ app.include_router(affiliation_history_router)
 from .resumable_search import router as resumable_search_router
 app.include_router(resumable_search_router)
 
+# Persist browser-reported provider/analysis stage failures and explicit fallbacks.
+from .client_progress import router as client_progress_router
+app.include_router(client_progress_router)
+
 # Answer-first case dossier and first-class claim quotation drilldown.
 from .case_dossier import router as case_dossier_router
 app.include_router(case_dossier_router)
