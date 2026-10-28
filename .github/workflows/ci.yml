@@ -28,6 +28,7 @@ jobs:
       - run: node tests/console_v4_smoke.cjs
       - run: node tests/console_v5_smoke.cjs
       - run: node tests/console_v7_9_smoke.cjs
+      - run: node tests/console_panels_smoke.cjs
       - run: node tests/console_p1_clarification_smoke.cjs
       - run: node tests/console_clarification_smoke.cjs
       - run: node --check static/app.js

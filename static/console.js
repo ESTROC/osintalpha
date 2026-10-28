@@ -512,6 +512,26 @@ async function loadResearchState(){
  // Initial response is one authorized request. Specialist tabs refresh their
  // own data when visited; no hidden background provider calls are started.
  const all=await api('/api/cases/'+s.id+'/initial-view?depth='+encodeURIComponent(s.depth));
+ if(!all?.initialRoundTripCount){
+   // Old API servers and limited mock fixtures retain their existing contract.
+   const [triage,conversations,researchPlan,runs,intelligence,webProviders,candidates]=await Promise.all([
+      api('/api/cases/'+s.id+'/triage'),
+      api('/api/cases/'+s.id+'/conversations'),
+      api('/api/cases/'+s.id+'/research-plan?depth='+s.depth),
+      api('/api/cases/'+s.id+'/research-history'),
+      api('/api/cases/'+s.id+'/intelligence'),
+      api('/api/research/providers'),
+      api('/api/cases/'+s.id+'/candidates')
+   ]);
+   Object.assign(all,{triage,conversations,researchPlan,runs,intelligence,webProviders,candidates});
+   all.queryExplain=await api('/api/cases/'+s.id+'/query-explain');
+   all.readiness=await api('/api/cases/'+s.id+'/decision-readiness');
+   all.searchProgress=await api('/api/cases/'+s.id+'/search-progress');
+   all.dossier=await api('/api/cases/'+s.id+'/dossier');
+   all.budget=await api('/api/cases/'+s.id+'/research-budget');
+   all.draft=await api('/api/cases/'+s.id+'/reviewed-report-draft');
+   all.refinements=await api('/api/cases/'+s.id+'/candidate-refinements');
+ }
  s.triage=all.triage;
  s.conversations=all.conversations?.items||[];
  s.researchPlan=all.researchPlan;

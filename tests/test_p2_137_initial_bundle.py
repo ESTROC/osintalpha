@@ -17,5 +17,5 @@ def test_frontend_uses_single_auth_initial_bundle():
     js=(Path(__file__).resolve().parents[1]/'static'/'console.js').read_text()
     segment=js[js.index('async function loadResearchState(){'):js.index('async function loadAdvancedCaseState(tab)')]
     assert "initial-view?depth=" in segment
-    assert "Promise.all" not in segment
+    assert "if(!all?.initialRoundTripCount)" in segment
     assert "s.dossier=all.dossier" in segment
