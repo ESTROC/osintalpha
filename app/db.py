@@ -568,6 +568,11 @@ CREATE TABLE IF NOT EXISTS report_distribution_reviews (
  decision TEXT NOT NULL,review_note TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS report_distribution_case ON report_distribution_reviews(case_id,reviewed_at);
+CREATE TABLE IF NOT EXISTS public_service_notices (
+ id TEXT PRIMARY KEY,status TEXT NOT NULL,message TEXT NOT NULL,
+ published_at TEXT NOT NULL,published_by TEXT NOT NULL REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS public_service_notices_date ON public_service_notices(published_at);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
