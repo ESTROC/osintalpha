@@ -673,6 +673,9 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
     if provider=='local':
         response=offline_guidance(question,ca,records,runs,history)
         response.update({'model':'Guided offline mode (rules, not AI)','provider':'local','remote':False})
+        response['answerProvenance']={
+            'query':question,'retrievedEvidenceIds':[r['id'] for r in records[:35]],
+            'braveSourceUrls':[],'retrievalMethod':'local_saved_sources'}
         response['sessionId']=save_chat(case_id,actor,body,question,response,'local')
         return response
     from .research_authorization import require_scope_if_enabled
@@ -830,6 +833,12 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
             'recordCitations':len(response.get('evidenceIds') or []),
             'braveContextSources':len(live_brave['sources']),
             'warning':'Record IDs and indexed pages establish provenance, not factual truth or the identity of the subject.'}
+        response['answerProvenance']={
+            'query':question,
+            'retrievedEvidenceIds':[r['id'] for r in records[:35]],
+            'braveSourceUrls':[str(x.get('url') or '') for x in live_brave['sources'][:12]],
+            'retrievalMethod':('brave_context' if body.brave_context else
+                 'groq_browser_search' if body.web_search else 'saved_case_sources')}
         response['sessionId']=save_chat(case_id,actor,body,question,response,provider)
         if body.brave_context and live_brave['sources']:
             # Persist *metadata and a one-way excerpt digest*, not copied web
@@ -1129,12 +1138,15 @@ def conversation(case_id:str,session_id:str,actor=Depends(actor_from_cookie)):
         row=c.execute('SELECT id,title,owner_id FROM research_sessions WHERE id=? AND case_id=?',(session_id,case_id)).fetchone()
         if not row or (row['owner_id']!=actor['id'] and actor['role']!='admin'):
             raise HTTPException(404,'Conversation not found.')
-        messages=c.execute('SELECT role,content,provider,evidence_ids_json,web_leads_json,created_at FROM research_messages WHERE session_id=? ORDER BY message_index LIMIT 300',(session_id,))
+        messages=c.execute('SELECT id,role,content,provider,evidence_ids_json,web_leads_json,created_at FROM research_messages WHERE session_id=? ORDER BY message_index LIMIT 300',(session_id,))
+        from .report_continuity import snapshot_metadata
         return {'session':{'id':row['id'],'title':row['title']},'messages':[
           {'role':r['role'],'text':r['content'],'provider':r['provider'],
            'ids':json.loads(r['evidence_ids_json']),
            'webLeads':json.loads(r['web_leads_json']),
-           'createdAt':r['created_at']} for r in messages]}
+           'createdAt':r['created_at'],
+           'provenance':snapshot_metadata(c,case_id,r['id']) if r['role']=='assistant' else None}
+           for r in messages]}
 
 class ClaimInput(BaseModel):
     evidence_id:str=Field(min_length=1,max_length=64)
