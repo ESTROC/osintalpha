@@ -574,11 +574,11 @@ def build_html_report(case,evidence,runs):
     method_rows=''.join('<li>'+esc(x['provider'])+' · '+esc(x['status'])+
         ' · '+esc(x['query_text'][:160])+' · '+esc(x['created_at'])+'</li>'
         for x in methods['recordedQueries'][:70])
-    methods_section='<h2>Recorded research protocol and failures</h2><p><b>Original question:</b> '+
+    methods_section=('<h2>Recorded research protocol and failures</h2><p><b>Original question:</b> '+
         esc(methods['originalQuestion'])+'</p><p>Attempted queries, never guaranteed complete:</p><ul>'+
         (method_rows or '<li>No saved source-query attempt.</li>')+'</ul>'+
         '<p>Saved failed or blocked stages: '+str(len(methods['recordedFailures']))+
-        '. No-hit and unavailable-source outcomes are distinct; historical and regional coverage cannot be guaranteed.</p>'
+        '. No-hit and unavailable-source outcomes are distinct; historical and regional coverage cannot be guaranteed.</p>')
     from .claim_support import index as report_claim_index
     with db.connect() as report_conn:
         support=report_claim_index(report_conn,case['id'])
