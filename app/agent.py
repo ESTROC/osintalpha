@@ -157,7 +157,7 @@ async def ai_proposed_step(case,context,job,steps,allowed):
         async with httpx.AsyncClient(timeout=13,follow_redirects=False) as client:
             result=await client.post('https://api.groq.com/openai/v1/chat/completions',
                headers={'Authorization':'Bearer '+os.environ['GROQ_API_KEY']},
-               json={'model':os.getenv('GROQ_MODEL','openai/gpt-oss-120b'),
+               json={'model':__import__('app.release',fromlist=['configured_groq_model']).configured_groq_model(),
                      'messages':[{'role':'system','content':sys},
                                  {'role':'user','content':json.dumps(state,ensure_ascii=False)}],
                      'temperature':0,'response_format':{'type':'json_object'},

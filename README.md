@@ -1,6 +1,6 @@
 # OSINT Alpha — Public-Source Investigation Workbench
 
-**Release branch:** V8.0 P2/P3 agency tools. **Stable baseline:** V7.9.  
+**Release version:** `8.1.0` (source of truth: `app/release.py`). **Status:** pilot evaluation, not regulated-production approved.  
 **Live frontend after a reviewed merge:** https://osintalpha-frontend.vercel.app  
 **Backend:** https://osintalpha-api.onrender.com  
 **Agency operations:** \`/assets/agency.html?case=<authorized-case-id>\` (analyst login required)  
@@ -54,3 +54,9 @@ Passing mocked tests and simulated UI checks does not establish source truth, in
 ## What remains
 
 Read [P2/P3 status](docs/P2_P3_IMPLEMENTATION_STATUS.md) and [the comprehensive agency register](docs/SHALINI_HANDOVER_V7_9.md). External OSINT services, OCR, forensic WARC archives, certified chain-of-custody, continuous provider uptime, complete mobile browser QA and licensed data contracts remain distinct follow-up work.
+
+## Release manifest and environment validation
+
+Runtime API docs and health report `app/release.py:VERSION`. The scheduled provider contract workflow tests fixtures, not live provider health. `BRAVE_SEARCH_API_KEY` and `GROQ_API_KEY` are private optional keys: missing values disable corresponding remote features. API credentials, cases and model responses must not appear in CI logs.
+
+The OpenAleph/FollowTheMoney bridge is a **local rights-attested mapping**, not a running upstream service. OpenCTI/IntelOwl bridge is explicitly disabled. Manual WARC integrity inspection is not licensed ArchiveBox capture or pywb replay. Source dates remain nullable, and provider cache only reuses exact case-scoped authorized public-source queries.

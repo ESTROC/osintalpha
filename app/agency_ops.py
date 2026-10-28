@@ -329,7 +329,7 @@ def operations(actor=Depends(core.actor_from_cookie)):
                    (SELECT 1 FROM case_members m WHERE m.case_id=c.id AND m.user_id=?))
                GROUP BY r.provider,r.state ORDER BY r.provider,r.state LIMIT 80""",
             (actor['role'],actor['id'],actor['id']))]
-    return {'apiStatus':'ok','utc':core.iso_now(),'version':'8.0.0',
+    return {'apiStatus':'ok','utc':core.iso_now(),'version':__import__('app.release',fromlist=['VERSION']).VERSION,
             'configured':{'Brave':bool(os.getenv('BRAVE_SEARCH_API_KEY')),
                           'Groq':bool(os.getenv('GROQ_API_KEY')),
                           'TfL':bool(os.getenv('TFL_APP_KEY'))},
@@ -518,8 +518,11 @@ def canary_history(actor=Depends(core.actor_from_cookie)):
 @router.get('/api/research/model-configuration')
 def model_configuration(actor=Depends(core.actor_from_cookie)):
     import os
-    model=os.getenv('GROQ_MODEL','openai/gpt-oss-120b')
-    return {'provider':'Groq','model':model,'configured':bool(os.getenv('GROQ_API_KEY')),
-            'toolModes':['structured_output','browser_search_separate'],
-            'validation':'configured only, not a live model capability probe',
-            'testedAgainst':'Mocked API and CI model fixtures; real-model release acceptance still required.'}
+    from .release import model_manifest
+    status=model_manifest()
+    status.update({'provider':'Groq','model':status['configuredModel'],
+                   'configured':bool(os.getenv('GROQ_API_KEY')),
+                   'toolModes':['structured_output','browser_search_separate'],
+                   'validation':'synthetic request-shape fixtures only',
+                   'testedAgainst':'CI simulated modes; live upstream QA still required.'})
+    return status
