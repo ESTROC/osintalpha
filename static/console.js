@@ -1,12 +1,13 @@
 
 /* OSINT Alpha release 8.1.0 pilot public research console. Source records are candidates, not verdicts. */
 (()=>{'use strict';
-const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},providerIssues:null,originReview:null,reviewObligations:null,timeliness:null,case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,chronology:null,cursorSources:[],cursorNext:null,runEvolution:null,budget:null,reviewedDraft:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
+const app=document.getElementById('app'), s={user:null,where:'home',mode:'person',cases:[],overview:{},sources:[],projects:[],capabilities:{},server:{},providerIssues:null,originReview:null,reviewObligations:null,timeliness:null,case:null,brief:null,dossier:null,dossierSort:'relevance',dossierStatus:'all',dossierClass:'all',claimDetail:null,chronology:null,cursorSources:[],cursorNext:null,runEvolution:null,budget:null,reviewedDraft:null,distribution:null,redaction:null,methodology:null,nextStep:null,refinements:null,id:null,tab:'overview',selected:null,messages:[],provider:'local',webSearch:false,braveContext:false,sessionId:null,conversations:[],triage:null,searchHistory:[],researchPlan:null,readiness:null,searchProgress:null,researchRuns:[],candidates:[],intel:null,lastResearch:null,depth:'standard',evidenceFilter:'all',evidenceSearch:'',evidenceSelected:[],changes:null,versions:{},jobs:[],job:null,tasks:[],taskAssignees:[],taskTotal:0,taskHistory:{},members:null,duplicateSources:null,identityQuality:null,excerpts:[],identity:null,draft:null,caseSearch:'',casePage:1,casePageSize:25,caseTotal:0,caseTotalPages:1,comparison:null,caseStatus:'all',caseType:'all',caseSort:'newest',caseOwner:'',caseFrom:'',caseTo:'',webProviders:null,portfolio:null,portfolioLocation:null,captures:{},users:[],busy:false,feed:'earthquakes',geo:[],geoStatus:'idle',geoError:'',cameraSelection:-1,satelliteEnabled:false,satelliteDate:new Date(Date.now()-86400000).toISOString().slice(0,10),smartPlan:null,smartStage:'',smartIssues:[],smartQuestion:'',smartCoverage:null};
 const modes={person:{name:'People',icon:'user',tip:'Public profiles and identity candidates',placeholder:'Full name or public handle',sources:['github','openalex','crossref','wikidata','wikipedia']},organization:{name:'Organizations',icon:'building',tip:'Companies and public entity references',placeholder:'Organization or registered business',sources:['gleif','github','wikipedia','wikidata','gdelt']},domain:{name:'Domains',icon:'globe',tip:'Passive DNS and domain metadata',placeholder:'Public domain name',sources:['dns']},ip:{name:'Public IPs',icon:'shield',tip:'Passive network exposure intelligence',placeholder:'Public IP address',sources:['internetdb']}};
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const url=x=>{try{const u=new URL(x);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'#'}catch{return '#'}};
 const when=x=>{if(!x)return 'Unknown';const n=Number(x);const d=new Date(typeof x==='number'||(/^\d{10,13}$/.test(String(x)))?(n<1e11?n*1000:n):x);return Number.isFinite(+d)?d.toLocaleString():String(x)};
 const link=(href,label)=>'<a class="text-link" target="_blank" rel="noopener noreferrer" href="'+h(url(href))+'">'+h(label)+' ↗</a>';
+const sourceBadge=x=>'<span class="source-provider-mark" role="img" aria-label="Source provider: '+h(x||'unknown')+'">'+h(String(x||'?').slice(0,2).toUpperCase())+'</span>';
 const tag=x=>'<span class="tag '+({corroborated:'ok',configured:'ok',ok:'ok',candidate:'warn',error:'bad',disputed:'warn',rejected:'bad',not_configured:'warn'}[x]||'')+'">'+h(x)+'</span>';
 const icon=k=>{const paths={home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',search:'<circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/>',case:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h6"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-5 16-5 16 0"/>',building:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h2m4 0h2M8 11h2m4 0h2"/>',globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>',shield:'<path d="m12 2 8 4v6c0 6-4 9-8 10-4-1-8-4-8-10V6Z"/><path d="m9 12 2 2 4-4"/>',world:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18m0-18c5 5 5 13 0 18"/>',sources:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M4 12H2m20 0h-2M12 4V2m0 20v-2M6 6 4 4m14 14 2 2"/>',arrow:'<path d="M4 12h16m-7-7 7 7-7 7"/>',back:'<path d="M20 12H4m7 7-7-7 7-7"/>',refresh:'<path d="M20 8a8 8 0 0 0-14-2L4 9m0-6v6h6M4 16a8 8 0 0 0 14 2l2-3m0 6v-6h-6"/>',plus:'<path d="M12 4v16M4 12h16"/>'};return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[k]||paths.case)+'</svg>'};
 function toast(text,error=false){const n=document.createElement('div');n.className='toast'+(error?' bad':'');n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),5100)}
@@ -46,12 +47,21 @@ function cases(){
  const controls='<div class="panel panel-pad" style="display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="meta">'+total+' matching cases · page '+page+' of '+pages+'</span>'+
  '<div class="inline-actions"><button class="btn small" type="button" data-case-page="'+(page-1)+'" '+(page<=1?'disabled':'')+'>Previous</button>'+
  '<button class="btn small" type="button" data-case-page="'+(page+1)+'" '+(page>=pages?'disabled':'')+'>Next</button></div></div>';
- return heading('RESEARCH PORTFOLIO','Investigations','Search and filter your complete accessible case registry, then resume a saved investigation.','<button data-nav="home" class="btn primary">'+icon('plus')+' New investigation</button>')+
- filters+'<div class="panel">'+(s.cases.length?s.cases.map(caseRow).join(''):'<div class="empty">No investigations match these filters.</div>')+'</div>'+controls;
+ const compareOptions=s.cases.map(x=>'<option value="'+h(x.id)+'">'+h(x.title)+'</option>').join('');
+ const comparison='<details class="panel panel-pad" style="margin:15px 0"><summary>Compare two authorized case reviews</summary>'+
+ '<p class="help">Only explicitly selected cases and source-quoted reviewed claims are compared; no identity merge.</p>'+
+ '<form id="case-compare-form" class="input-stack"><label>First case<select name="left" required>'+compareOptions+'</select></label>'+
+ '<label>Second case<select name="right" required>'+compareOptions+'</select></label>'+
+ '<button class="btn small" type="submit">Compare reviewed claims</button></form>'+
+ (s.comparison?'<p class="meta">Overlapping exact text+source: '+Number(s.comparison.overlappingExactTextAndSource)+
+ ' · left only: '+Number(s.comparison.leftOnly)+' · right only: '+Number(s.comparison.rightOnly)+'</p>'+
+ '<p class="help">'+h(s.comparison.notice)+'</p>':'')+'</details>';
+  return heading('RESEARCH PORTFOLIO','Investigations','Search and filter your complete accessible case registry, then resume a saved investigation.','<button data-nav="home" class="btn primary">'+icon('plus')+' New investigation</button>')+
+ filters+comparison+'<div class="panel">'+(s.cases.length?s.cases.map(caseRow).join(''):'<div class="empty">No investigations match these filters.</div>')+'</div>'+controls;
 }
 const tabs=['overview','assistant','evidence','reports'];
 const advancedTabs=['portfolio','investigate','tasks','team','candidates','findings','activity'];
-function casePage(){const c=s.case?.case;if(!c)return '<div class="empty">Loading case…</div>';const b=s.brief||{};return '<div class="casehead"><div><button data-nav="cases" class="back-link">'+icon('back')+' Investigations</button><div class="eyebrow">'+h(c.subject_type)+' / EVIDENCE WORKSPACE</div><h1 class="h1">'+h(c.title)+'</h1><p class="page-sub">'+h(c.purpose)+'</p><div class="badge-row" style="margin-top:12px"><span class="tag">'+h(c.query)+'</span><span class="tag">'+Number(b.total||0)+' records</span><span class="tag ok">'+Number(b.counts?.corroborated||0)+' corroborated</span></div></div><div class="inline-actions"><button class="btn small" data-webstart>'+icon('search')+' Research public web</button><button class="btn small" data-collect '+(s.busy?'disabled':'')+'>'+icon('refresh')+' '+(s.busy?'Working…':'Run sources')+'</button><a class="btn small primary" target="_blank" rel="noopener" href="/api/cases/'+h(c.id)+'/report-v4.pdf">Export report</a><button class="btn small subtle" type="button" data-deletecase title="Permanently delete this investigation">Delete case</button></div></div><div class="tabs">'+[...tabs,...(advancedTabs.includes(s.tab)?[s.tab]:[])].map(id=>'<button class="tab '+(s.tab===id?'active':'')+'" data-tab="'+id+'">'+({assistant:'Search & answer',evidence:'Sources',reports:'Report',overview:'Case overview',investigate:'Guided investigator',activity:'Source coverage',candidates:'Identity candidates',findings:'Analyst findings'}[id]||id.charAt(0).toUpperCase()+id.slice(1))+'</button>').join('')+'</div><details class="advanced-tools"><summary>More analyst tools · identities, collaboration, history</summary><div class="advanced-actions"><a class="btn small" target="_blank" rel="noopener" href="/assets/agency.html?case='+h(c.id)+'">Advanced agency toolkit</a>'+advancedTabs.map(id=>'<button class="btn small subtle" data-tab="'+id+'">'+h(id==='investigate'?'Guided research':id==='candidates'?'Identity review':id==='portfolio'?'Candidate profiles':id==='activity'?'Source history':id)+'</button>').join('')+'</div></details>'+({overview:caseOverview,portfolio:casePortfolio,investigate:caseInvestigate,tasks:caseTasks,team:caseTeam,candidates:caseCandidates,evidence:caseEvidence,assistant:caseAssistant,findings:caseFindings,reports:caseReports,activity:caseActivity}[s.tab]||caseOverview)()}
+function casePage(){const c=s.case?.case;if(!c)return '<div class="empty">Loading case…</div>';const b=s.brief||{};return '<div class="casehead"><div><button data-nav="cases" class="back-link">'+icon('back')+' Investigations</button><div class="eyebrow">'+h(c.subject_type)+' / EVIDENCE WORKSPACE</div><h1 class="h1">'+h(c.title)+'</h1><details class="title-edit"><summary>Edit concise case title</summary><form id="case-title-form" class="form-row"><input name="title" maxlength="100" minlength="4" value="'+h(c.title)+'" required aria-label="Case title"><button class="btn small" type="submit">Save title</button></form><p class="help">The full original research question is preserved.</p></details><p class="page-sub">'+h(c.purpose)+'</p><div class="badge-row" style="margin-top:12px"><span class="tag">'+h(c.query)+'</span><span class="tag">'+Number(b.total||0)+' records</span><span class="tag ok">'+Number(b.counts?.corroborated||0)+' corroborated</span></div></div><div class="inline-actions"><button class="btn small" data-webstart>'+icon('search')+' Research public web</button><button class="btn small" data-collect '+(s.busy?'disabled':'')+'>'+icon('refresh')+' '+(s.busy?'Working…':'Run sources')+'</button><a class="btn small primary" target="_blank" rel="noopener" href="/api/cases/'+h(c.id)+'/report-v4.pdf">Export report</a><button class="btn small subtle" type="button" data-deletecase title="Permanently delete this investigation">Delete case</button></div></div><div class="tabs">'+[...tabs,...(advancedTabs.includes(s.tab)?[s.tab]:[])].map(id=>'<button class="tab '+(s.tab===id?'active':'')+'" data-tab="'+id+'">'+({assistant:'Search & answer',evidence:'Sources',reports:'Report',overview:'Case overview',investigate:'Guided investigator',activity:'Source coverage',candidates:'Identity candidates',findings:'Analyst findings'}[id]||id.charAt(0).toUpperCase()+id.slice(1))+'</button>').join('')+'</div><details class="advanced-tools"><summary>More analyst tools · identities, collaboration, history</summary><div class="advanced-actions"><a class="btn small" target="_blank" rel="noopener" href="/assets/agency.html?case='+h(c.id)+'">Advanced agency toolkit</a>'+advancedTabs.map(id=>'<button class="btn small subtle" data-tab="'+id+'">'+h(id==='investigate'?'Guided research':id==='candidates'?'Identity review':id==='portfolio'?'Candidate profiles':id==='activity'?'Source history':id)+'</button>').join('')+'</div></details>'+({overview:caseOverview,portfolio:casePortfolio,investigate:caseInvestigate,tasks:caseTasks,team:caseTeam,candidates:caseCandidates,evidence:caseEvidence,assistant:caseAssistant,findings:caseFindings,reports:caseReports,activity:caseActivity}[s.tab]||caseOverview)()}
 
 function casePortfolio(){
  const p=s.portfolio||{},profiles=p.accountCandidates||[],mentions=p.documentsAndMentions||[],records=p.items||[],city=p.contextCity||'';
@@ -95,10 +105,18 @@ function caseTasks(){
  const items=s.tasks||[],options=[['todo','To do'],['in_progress','In progress'],['blocked','Blocked'],['awaiting_review','Awaiting review'],['done','Done'],['cancelled','Cancelled']];
  const opt=(current)=>options.map(([v,label])=>'<option value="'+v+'" '+(v===current?'selected':'')+'>'+label+'</option>').join('');
  const team=(s.taskAssignees||[]).map(a=>'<option value="'+h(a.id)+'">'+h(a.username)+'</option>').join('');
+ const batchPanel=items.length?'<section class="panel panel-pad" style="margin:16px 0"><h3>Audited batch task updates</h3>'+
+ '<form id="task-batch-form" class="input-stack"><label>Select 1–20 tasks<select name="ids" multiple size="5">'+
+ items.slice(0,20).map(x=>'<option value="'+h(x.id)+'">'+h(x.title)+' · '+h(x.status)+'</option>').join('')+'</select></label>'+
+ '<label>Update status<select name="status"><option value="blocked">Blocked</option><option value="in_progress">In progress</option>'+
+ '<option value="awaiting_review">Awaiting review</option><option value="todo">To do</option></select></label>'+
+ '<textarea name="note" minlength="20" maxlength="800" required placeholder="Provide one applicable rationale for the selected tasks."></textarea>'+
+ '<button class="btn small" type="submit">Preview, then confirm exact batch</button>'+
+ '<p class="help">Bulk completion and identity verification are not supported. Verify the preview before submitting again.</p></form></section>':'';
  const form='<section class="panel"><div class="panel-head"><div class="panel-title">New research task</div></div><form id="task-form" class="panel-pad input-stack"><label>Task objective<input name="title" minlength="3" maxlength="180" required placeholder="Verify employer from official website"></label><label>Instructions and evidence needed<textarea name="description" maxlength="2500" placeholder="What needs checking, expected source, accepted completion criteria"></textarea></label><div class="form-row"><label>Priority<select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option><option value="low">Low</option></select></label><label>Owner<select name="assigned_to"><option value="">Unassigned</option>'+team+'</select></label><label>Due date<input name="due_date" type="date"></label></div><button class="btn primary" type="submit">Create research task</button><p class="help">Assignment does not grant access to a different case. Only authorized case owner/administrator assignments are offered.</p></form></section>';
  const cards=items.length?items.map(x=>'<article class="candidate-card"><div class="badge-row"><span class="tag '+(x.status==='done'?'ok':x.status==='blocked'?'warn':'')+'">'+h(x.status.replaceAll('_',' '))+'</span><span class="tag">'+h(x.priority)+'</span></div><h3>'+h(x.title)+'</h3><p class="page-sub">'+h(x.description||'No instructions provided.')+'</p><div class="meta">Assigned to '+h(x.assignee_name||'unassigned')+' · Due '+h(x.due_date||'not scheduled')+'</div><form data-task-change="'+h(x.id)+'" class="input-stack" style="margin-top:15px"><label>Update status<select name="status">'+opt(x.status)+'</select></label><label>Reason or reviewed result<textarea name="note" minlength="8" maxlength="1200" required placeholder="Summarize work completed, blockers, supporting source or uncertainty"></textarea></label><button type="submit" class="btn small">Save task update</button><button type="button" data-task-history="'+h(x.id)+'" class="btn small subtle">View decision history</button></form>'+
  ((s.taskHistory[x.id]||[]).length?'<div class="sourcehealth" style="display:block;margin-top:12px">'+s.taskHistory[x.id].map(a=>'<p class="meta">'+h(when(a.created_at))+' · '+h(a.actor)+' · '+h(a.old_status)+' → '+h(a.new_status)+' · '+h(a.details)+'</p>').join('')+'</div>':'')+'</article>').join(''):'<div class="empty">No assigned research tasks yet. Record work that needs checking, ownership and completion evidence.</div>';
- return '<div class="analyst-intro"><div><div class="eyebrow">INVESTIGATION / HUMAN TASK TRACKING</div><h2>Research assignments and review</h2><p>Capture who will verify which public claims, by when, and document why a task was completed or blocked. Completing a task does not automatically verify a person.</p></div></div><div class="grid2">'+form+'<section class="panel"><div class="panel-head"><div class="panel-title">Task queue ('+Number(s.taskTotal||0)+')</div></div>'+cards+'</section></div>';
+ return '<div class="analyst-intro"><div><div class="eyebrow">INVESTIGATION / HUMAN TASK TRACKING</div><h2>Research assignments and review</h2><p>Capture who will verify which public claims, by when, and document why a task was completed or blocked. Completing a task does not automatically verify a person.</p></div></div>'+batchPanel+'<div class="grid2">'+form+'<section class="panel"><div class="panel-head"><div class="panel-title">Task queue ('+Number(s.taskTotal||0)+')</div></div>'+cards+'</section></div>';
 }
 
 function caseDossier(){
@@ -127,7 +145,7 @@ function caseDossier(){
    '<label>Class '+select('dossier-class',[['all','Any'],['account_or_profile_url','Public account leads'],['public_document_or_mention','Documents and mentions']],s.dossierClass)+'</label></div>';
  const items=sources.map(x=>'<div class="item-row dossier-source"><div class="row-main">'+
   (x.licensedThumbnail?'<img class="dossier-thumb" src="'+h(url(x.licensedThumbnail.url))+'" loading="lazy" referrerpolicy="no-referrer" alt="Licensed publisher source media; not a verified person photograph">':'')+
-  '<strong>'+h(x.label)+'</strong><p class="item-sub">'+h(x.provider)+' · '+h(x.reviewStatus)+' · '+h(x.sourceClass.replaceAll('_',' '))+' · '+h(when(x.fetchedAt))+'</p><p class="help">'+h(x.summary)+'</p>'+
+  sourceBadge(x.provider)+'<strong>'+h(x.label)+'</strong><p class="item-sub">'+h(x.provider)+' · '+h(x.reviewStatus)+' · '+h(x.sourceClass.replaceAll('_',' '))+' · '+h(when(x.fetchedAt))+'</p><p class="help">'+h(x.summary)+'</p>'+
   '<p class="meta">Ranking terms: '+h((x.rankingExplanation?.matchedQuestionTerms||[]).join(', ')||'none')+' · No calibrated person match</p>'+
   (x.licensedThumbnail?'<p class="meta">Source media credit: '+h(x.licensedThumbnail.credit)+' · '+h(x.licensedThumbnail.license)+'</p>':'')+
   '</div><button class="btn small" data-go-evidence="'+h(x.id)+'">Inspect</button></div>').join('');
@@ -156,7 +174,8 @@ function caseDossier(){
  (draft.sourceCount?'<button class="btn small primary" data-approve-report-draft="'+h(draft.reviewToken)+'">I reviewed these excerpts · save pending report</button>':
  '<p class="help">Corroborate and attach exact quotations before a report draft can be saved.</p>')+
  '</div></section>';
- return main+budgetPanel+'<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+missing+refinePanel+draftPanel+sourcePanel;
+ return main+missing+sourcePanel+'<details class="panel dossier-secondary"><summary>More analysis · identity candidates, claim review and usage</summary>'+
+ '<div class="grid2 dossier-grid">'+people+claimPanel+'</div>'+detail+refinePanel+draftPanel+budgetPanel+'</details>';
 }
 
 function caseOverview(){
@@ -403,7 +422,35 @@ function caseFindings(){
 function caseReports(){
  const id=h(s.id),ass=s.intel?.assessment||{};
  const ready=ass.status==='completed';
- return '<div class="analyst-intro"><div><div class="eyebrow">DELIVERABLES / REPRODUCIBLE SOURCE RECORDS</div><h2>Investigation report</h2><p>Your report includes the analyst assessment, candidate hypotheses, source-linked assertions, evidence and search coverage.</p></div></div>'+
+ const dist=s.distribution||{},method=s.methodology||{},next=s.nextStep||{};
+ const checked=['material_claims_checked','source_rights_checked','sensitive_content_checked','methodology_checked','limitations_checked'];
+ const controls='<section class="panel panel-pad" style="margin-bottom:16px"><h3>Independent distribution review</h3>'+
+  '<p class="help">'+(dist.readyForIndependentReview?
+  'An eligible assessment was found. A different authorized reviewer must independently approve this exact source version.':
+  'Draft only. Review an exact captured quotation for each material claim, resolve disputes and obtain a current sign-off before approval.')+'</p>'+
+  '<p class="meta">Reviewed sources: '+Number(dist.sourceCount||0)+' · material claims: '+Number(dist.claimCount||0)+'</p>'+
+  ((dist.readyForIndependentReview&&s.user?.role==='admin')?
+   '<form id="distribution-approval-form" class="input-stack">'+checked.map(k=>
+    '<label class="check"><input type="checkbox" name="'+k+'" required> '+h(k.replaceAll('_',' '))+'</label>').join('')+
+    '<textarea name="reviewer_note" rows="3" minlength="50" maxlength="1200" required placeholder="Independent review rationale and limitations"></textarea>'+
+    '<button class="btn small primary" type="submit">Approve exact reviewed version for distribution</button></form>':'')+
+  '<p class="help">Approval is revoked automatically when the current report digest changes. A source match is not proof of identity.</p></section>';
+ const redact='<section class="panel panel-pad" style="margin-bottom:16px"><h3>Preview export redactions</h3>'+
+ '<form id="report-redaction-form" class="input-stack"><label class="check"><input type="checkbox" name="suppress_subject_title" checked> Withhold case title</label>'+
+ '<label class="check"><input type="checkbox" name="suppress_original_urls" checked> Withhold source URLs</label>'+
+ '<label class="check"><input type="checkbox" name="suppress_source_labels" checked> Withhold source labels</label>'+
+ '<label class="check"><input type="checkbox" name="suppress_claim_text"> Withhold claim text</label>'+
+ '<button class="btn small" type="submit">Inspect redacted preview</button></form>'+
+ (s.redaction?'<p class="help">Preview only · '+Number(s.redaction.sources?.length||0)+' reviewed sources · '+
+ h((s.redaction.fieldsSuppressed||[]).join(', '))+'</p>':'')+
+ '<p class="help">Redaction is field-based; hidden personal details inside kept text require separate manual review.</p></section>';
+ const methods='<section class="panel panel-pad" style="margin-bottom:16px"><h3>Recorded methodology</h3>'+
+ '<p>Original question: '+h(method.originalQuestion||s.case?.case?.query||'unknown')+'</p>'+
+ '<p class="meta">Recorded attempted queries: '+Number(method.recordedQueries?.length||0)+
+ ' · failed or skipped stages: '+Number(method.recordedFailures?.length||0)+'</p>'+
+ '<p class="help">'+h(next.nextAction||'Original source checks and independent review are still required.')+'</p>'+
+ '<p class="help">Unsearched sources and unsuccessful retrievals never establish absence.</p></section>';
+ return controls+redact+methods+'<div class="analyst-intro"><div><div class="eyebrow">DELIVERABLES / REPRODUCIBLE SOURCE RECORDS</div><h2>Investigation report</h2><p>Your report includes the analyst assessment, candidate hypotheses, source-linked assertions, evidence and search coverage.</p></div></div>'+
  '<div class="grid2"><section class="panel panel-pad"><div class="badge-row">'+tag(ready?'ok':'draft')+'</div><h3>'+h(s.case.case.title)+'</h3><p class="page-sub">'+h(ass.executive_summary||'Draft: no executive assessment yet. Add an answer in Analyst findings before sharing this report.')+'</p><div class="reportlinks" style="margin:20px 0"><a class="btn primary" target="_blank" rel="noopener" href="/api/cases/'+id+'/report-v4.pdf">Download assessment PDF</a><a class="btn" target="_blank" rel="noopener" href="/api/cases/'+id+'/report-v4.html">Review HTML report ↗</a><a class="btn subtle" target="_blank" rel="noopener" href="/api/cases/'+id+'/report.json">Raw evidence JSON ↗</a><a class="btn subtle" target="_blank" rel="noopener" href="/api/cases/'+id+'/reviewed-source-bundle">Reviewed citation manifest ↗</a></div><p class="help">A report may be a useful negative finding: insufficient evidence is a legitimate outcome. Do not invent identity certainty.</p></section>'+
  '<section class="panel panel-pad"><h3>Before distributing</h3><div class="input-stack"><div class="sourcehealth">Confirm the intended subject and distinguish namesakes.</div><div class="sourcehealth">Review whether each material claim is supported by the linked source.</div><div class="sourcehealth">Record unavailable sources, dates and contradictions.</div><div class="sourcehealth">Remove unsupported allegations and unnecessary personal information.</div></div></section></div>';
 }
@@ -506,7 +553,7 @@ async function refreshCases(){
  const [ca,ov]=await Promise.all([api(request),api('/api/overview')]);
  s.cases=ca.items||[];s.overview=ov;s.caseTotal=ca.total??s.cases.length;s.caseTotalPages=ca.totalPages??Math.max(1,Math.ceil(s.caseTotal/s.casePageSize));
 }
-async function openCase(id){if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/?case='+encodeURIComponent(id));s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.chronology=null;s.cursorSources=[];s.cursorNext=null;s.runEvolution=null;s.originReview=null;s.reviewObligations=null;s.budget=null;s.reviewedDraft=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
+async function openCase(id){if(typeof window!=='undefined'&&window.history?.replaceState)window.history.replaceState(null,'','/?case='+encodeURIComponent(id));s.where='case';s.id=id;s.tab='overview';s.messages=[];s.sessionId=null;s.conversations=[];s.selected=null;s.webSearch=false;s.evidenceSelected=[];s.evidenceSearch='';s.evidenceFilter='all';s.lastResearch=null;s.captures={};s.versions={};s.changes=null;s.jobs=[];s.job=null;s.tasks=[];s.taskAssignees=[];s.taskTotal=0;s.taskHistory={};s.members=null;s.duplicateSources=null;s.identityQuality=null;s.excerpts=[];s.identity=null;s.draft=null;s.portfolio=null;s.portfolioLocation=null;s.triage=null;s.researchPlan=null;s.queryExplain=null;s.readiness=null;s.searchProgress=null;s.dossier=null;s.claimDetail=null;s.chronology=null;s.cursorSources=[];s.cursorNext=null;s.runEvolution=null;s.originReview=null;s.reviewObligations=null;s.budget=null;s.reviewedDraft=null;s.distribution=null;s.redaction=null;s.methodology=null;s.nextStep=null;s.refinements=null;s.dossierSort='relevance';s.dossierStatus='all';s.dossierClass='all';s.searchHistory=[];s.candidates=[];s.intel=null;s.smartPlan=null;s.smartStage='';s.smartIssues=[];s.smartCoverage=null;await fetchCase();
  try{const saved=await api('/api/cases/'+id+'/search-plan');if(saved.available){s.smartPlan=saved.plan;s.smartQuestion=saved.question}}catch(e){/* Legacy case; no versioned plan */}s.provider=(s.server.groqConfigured&&s.case.case.ai_opt_in)?'groq':'local';await loadResearchState();render()}
 async function loadResearchState(){
  // Initial response is one authorized request. Specialist tabs refresh their
@@ -559,7 +606,7 @@ async function loadAdvancedCaseState(tab){
   candidates:['candidates','identity-analysis','identity-quality'],
   evidence:['duplicate-sources','excerpts'],
   findings:['intelligence','excerpts','candidates'],
-  reports:['intelligence','candidates'],
+  reports:['intelligence','candidates','distribution/preview','methodology-appendix','research-next-step'],
   activity:['search-history','changes','research-history','chronology','evidence-cursor','source-origin-review','review-obligations'],
  }[tab]||[];
  const result=await Promise.all(endpoint.map(name=>api('/api/cases/'+id+'/'+name)));
@@ -578,6 +625,9 @@ async function loadAdvancedCaseState(tab){
   else if(name==='search-history')s.searchHistory=value.items||[];
   else if(name==='changes')s.changes=value;
   else if(name==='research-history')s.researchRuns=value.items||[];
+  else if(name==='distribution/preview')s.distribution=value;
+  else if(name==='methodology-appendix')s.methodology=value;
+  else if(name==='research-next-step')s.nextStep=value;
   else if(name==='chronology')s.chronology=value;
   else if(name==='evidence-cursor'){s.cursorSources=value.items||[];s.cursorNext=value.nextCursor||null;}
   else if(name==='source-origin-review')s.originReview=value;
@@ -956,9 +1006,50 @@ if(e.target.dataset?.pickEvidence){
  s.evidenceSelected=e.target.checked?[...new Set([...s.evidenceSelected,val])]:s.evidenceSelected.filter(x=>x!==val);
  render()
 }});
-document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form','case-candidate-refine-form','credential-change-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink||!!f.dataset?.adminReset||!!f.dataset?.adminStatus))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
+document.addEventListener('submit',async e=>{const f=e.target;if(!(['login-form','start-form','smart-search-form','review-form','manual-form','ask-form','context-form','user-form','claim-form','assessment-form','bulk-review-form','candidate-create-form','case-filter-form','job-form','excerpt-form','identity-compare-form','identity-label-form','task-form','member-form','case-candidate-refine-form','credential-change-form','case-title-form','distribution-approval-form','report-redaction-form','report-redacted-download-form','case-compare-form','task-batch-form'].includes(f.id)||!!f.dataset?.taskChange||!!f.dataset?.candidateReview||!!f.dataset?.candidateLink||!!f.dataset?.adminReset||!!f.dataset?.adminStatus))return;e.preventDefault();if(s.busy)return;const button=f.querySelector('button[type="submit"]')||f.querySelector('button');if(button)button.disabled=true;try{
 if(f.id==='login-form'){const d=Object.fromEntries(new FormData(f).entries());await api('/api/auth/login',{method:'POST',body:d});await init();toast('Signed in.')}
 if(f.id==='start-form')await launch(f);
+ if(f.id==='case-compare-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ if(d.left===d.right)throw Error('Choose two distinct cases to compare.');
+ s.comparison=await api('/api/agency/reviewed-case-compare?left='+encodeURIComponent(d.left)+'&right='+encodeURIComponent(d.right));
+ render();toast('Reviewed-source comparison loaded without merging identities.');
+}
+if(f.id==='task-batch-form'){
+ const d=Object.fromEntries(new FormData(f).entries());
+ const ids=[...f.querySelector('select[name="ids"]').selectedOptions].map(x=>x.value);
+ if(!ids.length)throw Error('Select at least one case task.');
+ const signature=JSON.stringify({ids,status:d.status,note:d.note});
+ if(f.dataset.confirmed!==signature){
+  const preview=await api('/api/cases/'+s.id+'/tasks/batch-preview',{method:'POST',body:{ids,status:d.status}});
+  if(!preview.canApply)throw Error('Some selected tasks are inaccessible: '+preview.rejectedCount);
+  f.dataset.confirmed=signature;toast('Preview passed for '+ids.length+' tasks. Submit again to apply.');
+ }else{
+  await api('/api/cases/'+s.id+'/tasks/batch',{method:'POST',body:{ids,status:d.status,note:d.note}});
+  const list=await api('/api/cases/'+s.id+'/tasks');s.tasks=list.items||[];s.taskTotal=list.total||0;render();
+  toast('Audited task states updated. No tasks automatically completed.');
+ }
+}
+if(f.id==='distribution-approval-form'){
+  const d=Object.fromEntries(new FormData(f).entries());
+  const approval={report_digest:s.distribution.currentDigest,reviewer_note:d.reviewer_note};
+  for(const k of ['material_claims_checked','source_rights_checked','sensitive_content_checked','methodology_checked','limitations_checked'])approval[k]=!!d[k];
+  await api('/api/cases/'+s.id+'/distribution/approve',{method:'POST',body:approval});
+  s.distribution=await api('/api/cases/'+s.id+'/distribution/preview');
+  render();toast('Independent distribution review approved against current source digest.');
+ }
+ if(f.id==='report-redaction-form'){
+   const d=Object.fromEntries(new FormData(f).entries());
+   const choice={suppress_subject_title:!!d.suppress_subject_title,suppress_original_urls:!!d.suppress_original_urls,
+     suppress_claim_text:!!d.suppress_claim_text,suppress_source_labels:!!d.suppress_source_labels,export_format:'json'};
+   s.redaction=await api('/api/cases/'+s.id+'/distribution/redaction-preview',{method:'POST',body:choice});
+   render();toast('Read-only preview generated; no export performed.');
+ }
+ if(f.id==='case-title-form'){
+    const title=String(new FormData(f).get('title')||'').trim();
+    await api('/api/cases/'+s.id+'/title',{method:'PATCH',body:{title}});
+    await fetchCase();await refreshCases();render();toast('Case title updated. Full original question retained.');
+ }
 if(f.id==='smart-search-form')await smartLaunch(f);
 if(f.id==='identity-label-form'){
  const d=Object.fromEntries(new FormData(f).entries());

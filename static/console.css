@@ -230,3 +230,7 @@ body{overflow-x:clip}
 .dossier-inspection{margin:15px 0}
 .dossier-inspection blockquote{margin:12px 0;padding:12px;border-left:3px solid #8ba9d5;white-space:pre-wrap}
 @media(max-width:700px){.dossier-grid{display:block}.dossier-filters{flex-direction:column;align-items:stretch}}
+
+.source-provider-mark{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:2.2rem;height:2.2rem;margin-right:.55rem;border:1px solid var(--border,#cad3df);border-radius:.5rem;background:transparent;font-weight:700;font-size:.73rem;letter-spacing:.04em}
+.dossier-secondary{margin-top:1.15rem;padding:1rem}
+.dossier-secondary>summary{cursor:pointer;font-weight:600}
