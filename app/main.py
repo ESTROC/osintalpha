@@ -1340,6 +1340,10 @@ app.include_router(case_dossier_router)
 from .candidate_refinement import router as candidate_refinement_router
 app.include_router(candidate_refinement_router)
 
+# Reviewed-excerpt report preview and explicit pending-approval draft acceptance.
+from .reviewed_report import router as reviewed_report_router
+app.include_router(reviewed_report_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)
