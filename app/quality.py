@@ -41,6 +41,11 @@ def add_review(case_id:str,body:PairReview,actor=Depends(core.protect)):
         conn.execute('INSERT INTO identity_pair_reviews VALUES (?,?,?,?,?,?,?,?)',
           (id,case_id,left,right,body.decision,body.rationale.strip(),
            actor['id'],datetime.now(timezone.utc).isoformat(timespec='microseconds')))
+        if body.decision=='different_people':
+            from .analyst_governance import queue
+            queue(conn,case_id,actor['id'],'namesake_conflict',left+'-'+right,
+                  'Review conflicting same-name public profiles',
+                  'Different-source pair '+left+' / '+right+' must remain separate until reviewer checks each source; do not auto-merge.')
     core.write_audit(actor['id'],'identity_signal_review','case',case_id,id)
     return {'id':id,'decision':body.decision,'notice':'Analyst-labelled example only; not independently verified ground truth.'}
 
