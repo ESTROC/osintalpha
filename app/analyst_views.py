@@ -122,6 +122,20 @@ def run_source_evolution(case_id:str,older_run:str,newer_run:str,
              'olderHash':a['content_sha256'] if a else None,
              'newerHash':b['content_sha256'] if b else None,
              'sourceUrl':(b or a)['source_url']})
-    return {'olderRun':older_run,'newerRun':newer_run,'items':items[:500],
+    changed_ids={x['evidenceId'] for x in items
+        if x['status'] in ('source_content_changed','not_returned_this_run')}
+    claim_rechecks=[]
+    if changed_ids:
+        with db.connect() as conn:
+            for x in conn.execute(
+                'SELECT id,evidence_id,claim_text,stance FROM claim_links WHERE case_id=?',
+                (case_id,)):
+                if x['evidence_id'] in changed_ids:
+                    claim_rechecks.append({'claimId':x['id'],'evidenceId':x['evidence_id'],
+                        'claimText':x['claim_text'][:240],
+                        'status':'needs_revalidation_due_to_source_change_or_coverage',
+                        'factRetracted':False})
+    return {'claimRechecks':claim_rechecks[:100],
+        'olderRun':older_run,'newerRun':newer_run,'items':items[:500],
        'truncated':len(items)>500,'withdrawnFactsVerified':False,
        'notice':'No longer returned in a finite query != withdrawn or deleted. Source changes require independent review.'}

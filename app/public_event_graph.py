@@ -85,6 +85,8 @@ def set_org_relation_dates(case_id:str,relation_id:str,body:RelationTime,
         if not row:raise HTTPException(404,'Case relationship was not found.')
         if row['review_state'] not in ('reviewed_public_record','disputed'):
             raise HTTPException(422,'Review original record before adding a dated relationship.')
+        if row['review_state']=='reviewed_public_record' and row['source_status']!='corroborated':
+            raise HTTPException(422,'A reviewed organization relation requires a corroborated case source.');
         conn.execute('DELETE FROM organization_relation_dates WHERE relation_id=?',(relation_id,))
         conn.execute('INSERT INTO organization_relation_dates VALUES (?,?,?,?,?,?,?,?,?)',
             (relation_id,case_id,body.left_kind,body.right_kind,
@@ -103,7 +105,7 @@ def org_links(case_id:str,actor=Depends(core.actor_from_cookie)):
             'r.evidence_id,e.source_url,d.valid_from,d.valid_until,d.contradiction_note '
             'FROM sourced_relationships r JOIN evidence e ON e.id=r.evidence_id AND e.case_id=r.case_id '
             'JOIN organization_relation_dates d ON d.relation_id=r.id AND d.case_id=r.case_id '
-            "WHERE r.case_id=? AND r.review_state IN ('reviewed_public_record','disputed') "
+            "WHERE r.case_id=? AND ((r.review_state='reviewed_public_record' AND e.status='corroborated') OR r.review_state='disputed') "
             'ORDER BY r.reviewed_at DESC,r.id DESC LIMIT 150',(case_id,))]
     return {'edges':links,'unrelatedEntitiesLinked':False,'legalRelationshipsVerified':False,
         'notice':'Edges are human-reviewed source claims, not independently certified legal ownership or a person graph.'}
