@@ -1381,6 +1381,10 @@ app.include_router(advanced_queries_router)
 from .provider_governance import router as provider_governance_router
 app.include_router(provider_governance_router)
 
+# Typed time-qualified analyst alias hypotheses and retirement.
+from .alias_validity import router as alias_validity_router
+app.include_router(alias_validity_router)
+
 # Source planning trace and explicitly recorded official negative-check reviews.
 from .query_diagnostics import router as query_diagnostics_router
 app.include_router(query_diagnostics_router)

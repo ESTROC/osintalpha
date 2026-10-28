@@ -468,6 +468,13 @@ CREATE TABLE IF NOT EXISTS provider_terms_reviews (
  review_notes TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id),
  reviewed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS alias_validity_reviews (
+ alias_id TEXT PRIMARY KEY REFERENCES research_aliases(id) ON DELETE CASCADE,
+ case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+ valid_from TEXT,valid_until TEXT,
+ review_state TEXT NOT NULL,review_rationale TEXT NOT NULL,
+ reviewed_at TEXT NOT NULL,reviewed_by TEXT NOT NULL REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS source_feedback (
  id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
