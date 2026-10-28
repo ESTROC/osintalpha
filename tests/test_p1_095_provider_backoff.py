@@ -21,8 +21,7 @@ def test_retry_one_rate_limit_then_succeed(monkeypatch):
 
 async def _noop():return None
 
-@pytest.mark.anyio
-async def test_no_retry_403(monkeypatch):
+def test_no_retry_403(monkeypatch):
     client=Mocked([403,200])
     with pytest.raises(AdapterError):asyncio.run(get_json(client,'https://api.github.com/example'))
     assert client.calls==1
