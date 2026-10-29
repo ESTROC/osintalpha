@@ -1,0 +1,113 @@
+"""Question-led public-search expansion without hardcoded people or employers.
+
+A parsed person-name is an unverified search label, never an identified
+individual. Queries prioritize a diverse set of publisher URLs, not contact
+harvesting or uncontrolled scraping.
+"""
+from __future__ import annotations
+import re
+from .query_parse import parse_question
+
+_PERSON_ANCHORS=(
+ r'\b(?:a\s+)?person\s+(?:called(?:\s+as)?|named)\s+',
+ r'\b(?:individual|someone)\s+(?:called|named)\s+',
+)
+_STOP_BOUNDARY=r'(?:who|whose|has|had|is|was|worked|working|studied|graduate(?:d)?|passed|from|at|in|with|and|that)\b'
+_WORDBOUND=re.compile(r"[A-Za-z][A-Za-z'.-]{1,42}")
+_UNHELPFUL={
+ 'want','know','please','person','someone','individual','called','named','about',
+ 'find','more','details','information','worked','working','has','have','had','was',
+ 'with','from','passed','out','form','the','their','there','where','who','which',
+ 'that','and','is','as','at','in','for','graduated','graduation','education',
+ 'record','records','source','sources','public','profile','university','college',
+ 'engineering','engineer','academic','professional','profession','of'
+}
+_TOPIC_GROUPS=[
+ ('cyber','security','infosec'),('software','development','coding','developer'),
+ ('internship','intern','experience'),('engineering','engineer'),
+ ('education','college','school','university','graduation')]
+_CONTACT_HOSTS={'rocketreach.co','signalhire.com','lusha.com'}
+
+def person_name(question):
+    original=' '.join(str(question or '').split())
+    # A sentence can explicitly introduce a person after filler words.
+    for prefix in _PERSON_ANCHORS:
+        pat=re.compile(prefix+r'(?P<name>[A-Za-z][A-Za-z\'.-]*(?:\s+[A-Za-z][A-Za-z\'.-]*){1,3}?)'
+             +r'(?=\s+'+_STOP_BOUNDARY+r'|[,.;?!]|$)',re.I)
+        match=pat.search(original)
+        if match:
+            name=match.group('name').strip()
+            if len(name.split())>=2:
+                return name
+    parsed=parse_question(original)
+    name=parsed.subject_text
+    if 2<=len(name.split())<=4 and len(name)<135:
+        return name
+    return ''
+
+def question_clues(question,name,context=None):
+    original=' '.join(str(question or '').split())
+    remainder=original
+    if name:
+        remainder=re.sub(re.escape(name),' ',remainder,flags=re.I,count=1)
+    words=re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}",remainder)
+    keywords=[]
+    for word in words:
+        low=word.casefold()
+        if low in _UNHELPFUL or low in {x.casefold() for x in name.split()}:
+            continue
+        if low not in {x.casefold() for x in keywords}:
+            keywords.append(word)
+    hints=context or {}
+    if hints.get('organization'):
+        keywords.insert(0,str(hints['organization']).strip())
+    if hints.get('city'):
+        keywords.append(str(hints['city']).strip())
+    # Literal public clues, no profession/employer inference.
+    return keywords[:12]
+
+def select_queries(question,subject,context=None,lens='general',depth=4):
+    """Return <=depth diverse query variants; first preserves analyst wording."""
+    original=' '.join(str(question or '').split())[:200]
+    if not original:
+        return []
+    name=person_name(original) or person_name(subject)
+    if not name:
+        return [original]
+    keys=question_clues(original,name,context)
+    compact=[str(x).strip() for x in keys if str(x).strip()]
+    # Source-indicative words like navy are more informative than "who"/"is".
+    rare=sorted(compact,key=lambda x:(-len(x),compact.index(x)))
+    best=rare[0] if rare else ''
+    next_value=next((x for x in rare[1:] if x.casefold()!=best.casefold()),'')
+    label='"'+name.replace('"','')+'"'
+    out=[original]
+    if best:
+        out.append(f'{label} "{best}"'+(f' {next_value}' if next_value else ''))
+    else:
+        out.append(label)
+    focus=next((x for x in compact if x.casefold() in
+                {'navy','cyber','cybersecurity','security','internship','engineering','army','adgips'}),best)
+    if lens in ('general','professional','education'):
+        out.append(f'site:linkedin.com/posts/ {label}'+(' '+focus if focus else ''))
+        if lens=='professional':
+            out.append(f'site:linkedin.com/in/ {label}'+(' '+focus if focus else ''))
+    if len(out)<depth:
+        for hint in compact:
+            q=f'{label} "{hint}"'
+            if q not in out:
+                out.append(q)
+            if len(out)>=depth:break
+    seen=set();dedup=[]
+    for item in out:
+        item=' '.join(item.split())[:200]
+        key=item.casefold()
+        if key not in seen:
+            seen.add(key);dedup.append(item)
+        if len(dedup)>=depth:break
+    return dedup
+
+def contact_directory(url):
+    from urllib.parse import urlparse
+    hostname=(urlparse(str(url or '')).hostname or '').lower()
+    return any(hostname==host or hostname.endswith('.'+host) for host in _CONTACT_HOSTS)
