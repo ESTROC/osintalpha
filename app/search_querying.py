@@ -76,22 +76,36 @@ def select_queries(question,subject,context=None,lens='general',depth=4):
         return [original]
     keys=question_clues(original,name,context)
     compact=[str(x).strip() for x in keys if str(x).strip()]
-    # Source-indicative words like navy are more informative than "who"/"is".
-    rare=sorted(compact,key=lambda x:(-len(x),compact.index(x)))
-    best=rare[0] if rare else ''
-    next_value=next((x for x in rare[1:] if x.casefold()!=best.casefold()),'')
+    parsed=parse_question(original)
+    # These are literal phrases from the question, never verified employers.
+    organizations=list(parsed.organization_clues)
+    entered=str((context or {}).get('organization') or '').strip()
+    if entered and entered.casefold() not in {x.casefold() for x in organizations}:
+        organizations.insert(0,entered)
+    primary=organizations[0] if organizations else ''
+    secondary_match=re.search(
+        r'\b(?:graduated\s+from|passed\s+out\s+from|educated\s+at|studied\s+at|from)\s+'
+        r'([A-Za-z][A-Za-z0-9_.-]{2,50})(?=\b|$)',original,re.I)
+    secondary=secondary_match.group(1) if secondary_match else ''
+    if secondary.casefold() in {'the','a','an','work','job','home','here'}:
+        secondary=''
     label='"'+name.replace('"','')+'"'
     out=[original]
-    if best:
-        out.append(f'{label} "{best}"'+(f' {next_value}' if next_value else ''))
+    if primary:
+        out.append(f'{label} "{primary}"'+(' '+compact[0] if compact else ''))
+    elif compact:
+        out.append(f'{label} "'+compact[0]+'"')
     else:
         out.append(label)
-    focus=next((x for x in compact if x.casefold() in
-                {'navy','cyber','cybersecurity','security','internship','engineering','army','adgips'}),best)
+    # Public posts are often indexed even when LinkedIn /in/ profiles are not.
     if lens in ('general','professional','education'):
-        out.append(f'site:linkedin.com/posts/ {label}'+(' '+focus if focus else ''))
-        if lens=='professional':
-            out.append(f'site:linkedin.com/in/ {label}'+(' '+focus if focus else ''))
+        out.append(f'site:linkedin.com/posts/ {label}'+
+                   (' "'+primary+'"' if primary else (' '+compact[0] if compact else '')))
+    if secondary and secondary.casefold() not in (primary.casefold(),name.casefold()):
+        out.append(f'{label} "{secondary}"')
+    elif lens=='professional':
+        out.append(f'site:linkedin.com/in/ {label}'+
+                   (' "'+primary+'"' if primary else ''))
     if len(out)<depth:
         for hint in compact:
             q=f'{label} "{hint}"'
