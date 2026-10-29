@@ -617,7 +617,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         from .brave_context import retrieve
         live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang)
     from .retrieval import rank_case_evidence
-    selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
+    selected,retrieval=rank_case_evidence(ev,question,clues,limit=35,
+            focused_person=(ca['subject_type']=='person'),subject=ca['query'])
     records=chat_evidence(selected)
     # Source text is explicitly labeled untrusted. The model may cite a source
     # record but may not promote its contents to independently verified fact.
