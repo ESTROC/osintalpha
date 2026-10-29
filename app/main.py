@@ -531,7 +531,7 @@ class ChatMessage(BaseModel):
     brave_context:bool=False
     save_bounded_excerpts:bool=False
     freshness:Literal['all','pd','pw','pm','py']='all'
-    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    country:Literal['ALL','US','IN','GB','CA','AU','DE','FR']='ALL'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     session_id:str|None=Field(default=None,max_length=64)
 
@@ -617,7 +617,8 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
         from .brave_context import retrieve
         live_brave=await retrieve(ca,question,clues,freshness=body.freshness,country=body.country,search_lang=body.search_lang)
     from .retrieval import rank_case_evidence
-    selected,retrieval=rank_case_evidence(ev,question,clues,limit=35)
+    selected,retrieval=rank_case_evidence(ev,question,clues,limit=35,
+            focused_person=(ca['subject_type']=='person'),subject=ca['query'])
     records=chat_evidence(selected)
     # Source text is explicitly labeled untrusted. The model may cite a source
     # record but may not promote its contents to independently verified fact.
@@ -682,6 +683,24 @@ async def chat(case_id:str,body:ChatMessage,actor=Depends(protect)):
                 output='\n'.join(part.get('text','') for item in data.get('output',[])
                      for part in item.get('content',[]) if part.get('type')=='output_text')
         response=normalize_ai_response(output,records)
+        # A human-verified identity is never inferred from a same-name hit,
+        # but equally a search result for part of the query must not be
+        # re-described as proof that no public candidate record exists.
+        response['relevantCandidates']=[{
+            'id':r['id'],'title':r['label'][:180],'url':r['source_url'],
+            'provider':r['provider'],'status':'unverified_candidate'}
+            for r in selected[:8] if str(r.get('source_url') or '').startswith('https://')]
+        if ca['subject_type']=='person' and response['relevantCandidates'] and re.search(
+            r'\b(?:do not contain any record|no (?:public )?record of|none (?:of .{0,110})?link(?:s|ed)? to)\b',
+            response['answer'],re.I):
+            response['answer']=(
+                'The retrieved public-index results include candidate pages overlapping '
+                'the queried name and at least one stated clue. They are not independent '
+                'proof of identity, employment or education. Review the candidate source '
+                'links below and verify each attribute separately. The absence of a '
+                'particular institution record cannot establish that no such person exists.')
+            response['needsDisambiguation']=True
+            response['followUp']='Which original public record can independently corroborate the remaining education or employer details?'
         # Separate observed candidates from confirmed person identity. Even a
         # source with matching name, URL and exact passage is not proof that
         # the searched person owns that profile.

@@ -80,7 +80,7 @@ def parse_context(payload: dict[str, Any], *, max_sources: int = 7) -> list[dict
 
 
 async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
-                   *, client=None, freshness='all', country='US', search_lang='en') -> dict[str, Any]:
+                   *, client=None, freshness='all', country='ALL', search_lang='en') -> dict[str, Any]:
     key = os.getenv('BRAVE_SEARCH_API_KEY', '').strip()
     if not key:
         raise HTTPException(409, 'BRAVE_SEARCH_API_KEY is not configured on Render.')
@@ -107,7 +107,7 @@ async def retrieve(case: dict[str, Any], question: str, clues: dict[str, str],
                 'maximum_number_of_tokens': 4600, 'maximum_number_of_snippets': 20,
                 'context_threshold_mode': 'balanced', 'enable_source_metadata': True,
                 'safesearch': 'strict', 'enable_local': local_recall,
-                'country':country,'search_lang':search_lang,
+                **({'country':country} if country!='ALL' else {}),'search_lang':search_lang,
                 **({'freshness':freshness} if freshness!='all' else {}),
             })
         response.raise_for_status()
