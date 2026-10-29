@@ -531,7 +531,7 @@ class ChatMessage(BaseModel):
     brave_context:bool=False
     save_bounded_excerpts:bool=False
     freshness:Literal['all','pd','pw','pm','py']='all'
-    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    country:Literal['ALL','US','IN','GB','CA','AU','DE','FR']='ALL'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     session_id:str|None=Field(default=None,max_length=64)
 
