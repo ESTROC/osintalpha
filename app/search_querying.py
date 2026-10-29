@@ -39,6 +39,11 @@ def person_name(question):
             name=match.group('name').strip()
             if len(name.split())>=2:
                 return name
+    # A short supplied subject label may itself be the entire person name,
+    # even when its surname resembles a generic role (e.g. Sample Person).
+    pieces=original.split()
+    if 2<=len(pieces)<=3 and all(_WORDBOUND.fullmatch(x) for x in pieces):
+        return original
     parsed=parse_question(original)
     name=parsed.subject_text
     if 2<=len(name.split())<=4 and len(name)<135:
@@ -101,11 +106,19 @@ def select_queries(question,subject,context=None,lens='general',depth=4):
     if lens in ('general','professional','education'):
         out.append(f'site:linkedin.com/posts/ {label}'+
                    (' "'+primary+'"' if primary else (' '+compact[0] if compact else '')))
-    if secondary and secondary.casefold() not in (primary.casefold(),name.casefold()):
-        out.append(f'{label} "{secondary}"')
-    elif lens=='professional':
+    if lens=='education':
+        out.append(f'{label} school OR college OR university')
+        out.append(f'{label} public project OR scholarship OR competition')
+    elif lens=='trade':
+        out.append(f'{label} trade OR service OR business listing')
+        out.append(f'{label} shop OR contractor OR license')
+    elif lens=='general' and not secondary:
+        out.append(f'{label} community OR business OR event')
+    elif lens=='professional' and not secondary:
         out.append(f'site:linkedin.com/in/ {label}'+
                    (' "'+primary+'"' if primary else ''))
+    if secondary and secondary.casefold() not in (primary.casefold(),name.casefold()):
+        out.append(f'{label} "{secondary}"')
     if len(out)<depth:
         for hint in compact:
             q=f'{label} "{hint}"'
