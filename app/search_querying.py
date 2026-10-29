@@ -95,8 +95,14 @@ def select_queries(question,subject,context=None,lens='general',depth=4):
     if secondary.casefold() in {'the','a','an','work','job','home','here'}:
         secondary=''
     label='"'+name.replace('"','')+'"'
-    out=[original]
-    if primary:
+    org_ctx=str((context or {}).get('organization') or '').strip()
+    city_ctx=str((context or {}).get('city') or '').strip()
+    has_legacy_scope=bool(original.casefold()==name.casefold() and (org_ctx or city_ctx))
+    first=original+(' '+org_ctx if org_ctx else '')+(' '+city_ctx if city_ctx else '') if has_legacy_scope else original
+    out=[first]
+    if has_legacy_scope and lens=='professional':
+        pass  # The original query already contains explicit analyst clues.
+    elif primary:
         out.append(f'{label} "{primary}"'+(' '+compact[0] if compact else ''))
     elif compact:
         out.append(f'{label} "'+compact[0]+'"')
@@ -117,6 +123,8 @@ def select_queries(question,subject,context=None,lens='general',depth=4):
     elif lens=='professional' and not secondary:
         out.append(f'site:linkedin.com/in/ {label}'+
                    (' "'+primary+'"' if primary else ''))
+        out.append(f'site:github.com {label}'+
+                   (' "'+org_ctx+'"' if org_ctx else ''))
     if secondary and secondary.casefold() not in (primary.casefold(),name.casefold()):
         out.append(f'{label} "{secondary}"')
     if len(out)<depth:
