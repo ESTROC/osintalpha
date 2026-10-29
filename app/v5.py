@@ -86,7 +86,7 @@ class WebSearchInput(BaseModel):
     depth:int=Field(default=2,ge=1,le=4)
     lens:Literal['general','professional','education','trade','organization']='general'
     freshness:Literal['all','pd','pw','pm','py']='all'
-    country:Literal['US','IN','GB','CA','AU','DE','FR']='US'
+    country:Literal['ALL','US','IN','GB','CA','AU','DE','FR']='ALL'
     search_lang:Literal['en','hi','bn','ta','te','mr','de','fr']='en'
     consent:bool=False
 
