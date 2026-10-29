@@ -57,7 +57,7 @@ def public_discovery_lens(question):
         return 'trade'
     if re.search(r'\b(student|school|college|campus|education|scholarship|competition|university admission|sports event)\b',q):
         return 'education'
-    if re.search(r'\b(github|linkedin|software developer|engineer|cv|portfolio|employment history)\b',q):
+    if re.search(r'\b(github|linkedin|software developer|engineer|engineering|cybersecurity|cyber security|cyber|security internship|cv|portfolio|employment history)\b',q):
         return 'professional'
     return 'general'
 
@@ -77,7 +77,11 @@ def deterministic_route(question, explicit_type=None):
         kind = 'organization'
     else:
         kind = 'person'  # Tentative storage category; not an identification.
-    subject = q if kind in ('domain', 'ip') else (looks_name(q) or q)[:160]
+    # An explicit "person named/called ..." clause is stronger than a
+    # generic first-position word heuristic. Keep it an unverified label.
+    from .search_querying import person_name
+    stated_person=person_name(q) if kind=='person' else ''
+    subject = q if kind in ('domain', 'ip') else (stated_person or looks_name(q) or q)[:160]
     # Do not turn example words or topics into assertions about this subject.
     # Clues are supplied by the analyst or copied literally by the opt-in planner.
     ctx = {'city':'','organization':'','profession':'','public_handle':''}
@@ -96,6 +100,13 @@ def deterministic_route(question, explicit_type=None):
     else:
         providers=[]  # Web index is broader for ambiguous/non-professional queries.
     parsed = parse_question(q)
+    parsed_info=parsed.as_dict()
+    if stated_person and parsed_info.get('subject_text')!=stated_person:
+        parsed_info['subject_text']=stated_person
+        parsed_info['name_tokens']=stated_person.split()
+        parsed_info['identity_state']='name_with_unverified_clues'
+        parsed_info['needs_clarification']=False
+        parsed_info['clarification_prompts']=[]
     # Person-identity prompts only make sense for person-type questions.
     person_q = kind == 'person'
     return {'subjectType':kind,'subject':subject,'context':ctx,
@@ -103,9 +114,9 @@ def deterministic_route(question, explicit_type=None):
             'discoveryLens':public_discovery_lens(q),
             'strategy':'Deterministic relevance routing; broad Brave web context if enabled',
             'aiPlanned':False,
-            'parsed':parsed.as_dict(),
-            'needsClarification':bool(person_q and parsed.needs_clarification),
-            'clarification':list(parsed.clarification_prompts) if person_q else [],
+            'parsed':parsed_info,
+            'needsClarification':bool(person_q and parsed_info['needs_clarification']),
+            'clarification':list(parsed_info['clarification_prompts']) if person_q else [],
             'caveat':'Subject classification and all person/name matches are tentative.'}
 
 
