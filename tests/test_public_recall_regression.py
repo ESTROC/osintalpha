@@ -150,3 +150,44 @@ def test_groq_receives_only_topic_matching_namesake_candidates(client,auth,monke
     assert out.json()['retrieval']['excludedAsUnrelatedCandidates']==2
     assert any('Indian Navy' in x for x in seen)
     assert not any('Genpact' in x or 'IDfy' in x for x in seen)
+
+
+def test_model_cannot_claim_no_public_record_when_relevant_lead_exists(client,auth,monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','synthetic-test-only')
+    created=client.post('/api/cases',headers=auth,json={
+        'title':'Namesake accuracy regression','subject_type':'person',
+        'query':'Ayush Tripathi','purpose':'Authorized synthetic evidence evaluation',
+        'authority_confirmed':True,'ai_opt_in':True})
+    assert created.status_code==201
+    cid=created.json()['id']
+    with db.connect() as conn:
+        conn.execute('''INSERT INTO evidence
+          (id,case_id,provider,label,summary,source_url,source_ref,fetched_at,
+           sha256,raw_json,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+           ('public-navy-lead',cid,'brave_web',
+            'Ayush Tripathi — Indian Navy cyber security internship',
+            'Self-reported public LinkedIn post about Indian Navy security internship',
+            'https://www.linkedin.com/posts/synthetic-only','public-navy-lead',
+            '2026-10-29T12:00:00Z',
+            hashlib.sha256(b'public navy').hexdigest(),'{}','candidate'))
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return {'choices':[{'message':{'content':json.dumps({
+            'answer':'The sources we have do not contain any record of that work.',
+            'evidence_ids':[],'needs_disambiguation':True,
+            'follow_up':'Please supply a second clue.'})}}]}
+    class Client:
+        def __init__(self,*args,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):return None
+        async def post(self,*args,**kwargs):return Response()
+    monkeypatch.setattr(main.httpx,'AsyncClient',Client)
+    r=client.post(f'/api/cases/{cid}/chat',headers=auth,json={
+        'provider':'groq','question':PROMPT})
+    assert r.status_code==200,r.text
+    out=r.json()
+    assert 'do not contain any record' not in out['answer']
+    assert 'candidate pages' in out['answer']
+    assert len(out['relevantCandidates'])==1
+    assert out['relevantCandidates'][0]['url'].startswith('https://www.linkedin.com/posts/')
+    assert out['needsDisambiguation'] is True
